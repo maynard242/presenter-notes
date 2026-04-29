@@ -1,0 +1,401 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Presenter Notes API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: notes
+    description: Presentation notes operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /notes:
+    get:
+      operationId: listNotes
+      tags: [notes]
+      summary: List notes
+      description: List all presentation notes, optionally filtered
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Full-text search across title, event, and content
+        - name: event
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by event name (partial match)
+      responses:
+        "200":
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoteList"
+        "401":
+          description: Unauthorized
+
+    post:
+      operationId: createNote
+      tags: [notes]
+      summary: Create a note
+      description: Create a new presentation note (from markdown upload)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNoteBody"
+      responses:
+        "201":
+          description: Created note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
+  /notes/events:
+    get:
+      operationId: listEvents
+      tags: [notes]
+      summary: List distinct events
+      description: Get a list of all distinct event names for filtering/navigation
+      responses:
+        "200":
+          description: List of distinct events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventList"
+        "401":
+          description: Unauthorized
+
+  /notes/stats:
+    get:
+      operationId: getNotesStats
+      tags: [notes]
+      summary: Get notes statistics
+      description: Returns summary stats for the dashboard
+      responses:
+        "200":
+          description: Notes statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotesStats"
+        "401":
+          description: Unauthorized
+
+  /notes/{id}:
+    get:
+      operationId: getNote
+      tags: [notes]
+      summary: Get a note
+      description: Get a single presentation note by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+    patch:
+      operationId: updateNote
+      tags: [notes]
+      summary: Update a note
+      description: Update a presentation note's metadata or content
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNoteBody"
+      responses:
+        "200":
+          description: Updated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+    delete:
+      operationId: deleteNote
+      tags: [notes]
+      summary: Delete a note
+      description: Delete a presentation note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /notes/upload:
+    post:
+      operationId: uploadNoteMarkdown
+      tags: [notes]
+      summary: Upload markdown file
+      description: Upload a markdown file to create or update a note. Parses frontmatter for title, event, and date.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadMarkdownBody"
+      responses:
+        "201":
+          description: Created or updated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
+  /notes/agent-upload:
+    post:
+      operationId: agentUploadNote
+      tags: [notes]
+      summary: Agent upload endpoint
+      description: Authenticated endpoint for agents to push markdown notes using an API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentUploadBody"
+      responses:
+        "201":
+          description: Created or updated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    Note:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        event:
+          type: string
+        eventDate:
+          type: ["string", "null"]
+          description: ISO date string of when the presentation was given
+        content:
+          type: string
+          description: Raw markdown content
+        tags:
+          type: array
+          items:
+            type: string
+        filename:
+          type: ["string", "null"]
+          description: Original uploaded filename
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - title
+        - event
+        - eventDate
+        - content
+        - tags
+        - filename
+        - createdAt
+        - updatedAt
+
+    NoteList:
+      type: array
+      items:
+        $ref: "#/components/schemas/Note"
+
+    CreateNoteBody:
+      type: object
+      properties:
+        title:
+          type: string
+        event:
+          type: string
+        eventDate:
+          type: ["string", "null"]
+        content:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        filename:
+          type: ["string", "null"]
+      required:
+        - title
+        - event
+        - content
+
+    UpdateNoteBody:
+      type: object
+      properties:
+        title:
+          type: string
+        event:
+          type: string
+        eventDate:
+          type: ["string", "null"]
+        content:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    UploadMarkdownBody:
+      type: object
+      properties:
+        filename:
+          type: string
+        content:
+          type: string
+          description: Raw markdown content (may include YAML frontmatter)
+      required:
+        - filename
+        - content
+
+    AgentUploadBody:
+      type: object
+      properties:
+        apiKey:
+          type: string
+          description: Secret agent API key for authentication
+        filename:
+          type: string
+        content:
+          type: string
+          description: Raw markdown content
+        title:
+          type: ["string", "null"]
+        event:
+          type: ["string", "null"]
+        eventDate:
+          type: ["string", "null"]
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - apiKey
+        - filename
+        - content
+
+    EventList:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            type: string
+      required:
+        - events
+
+    NotesStats:
+      type: object
+      properties:
+        totalNotes:
+          type: integer
+        totalEvents:
+          type: integer
+        recentNotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Note"
+        topEvents:
+          type: array
+          items:
+            type: object
+            properties:
+              event:
+                type: string
+              count:
+                type: integer
+            required:
+              - event
+              - count
+      required:
+        - totalNotes
+        - totalEvents
+        - recentNotes
+        - topEvents
