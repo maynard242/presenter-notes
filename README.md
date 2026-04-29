@@ -66,6 +66,17 @@ The frontend is served at `/`, the API at `/api`. Access them through your dev s
 | `CLERK_PUBLISHABLE_KEY` | yes | Clerk frontend publishable key (server-side host derivation) |
 | `VITE_CLERK_PUBLISHABLE_KEY` | yes | Same key, exposed to the Vite frontend |
 | `AGENT_API_KEY` | yes (for agents) | Shared secret protecting both REST `/api/notes/agent-upload` and MCP `/api/mcp`. Choose any strong random string. |
+| `AGENT_OWNER_USER_ID` | yes (for agents) | Clerk user id (e.g. `user_2abc...`) that owns notes created or read by the agent surfaces. Required for agent endpoints; if unset, agent uploads return 503 and MCP tools return an error. Find your id in Clerk's dashboard or by signing in and checking `auth.userId`. |
+
+> **Upgrading from a pre-ownership build:** the `notes` table now has a `user_id text not null` column. If you have existing rows (created before this version), back-fill them with the owner's Clerk user id before running `pnpm --filter @workspace/db run push --force`, or delete them if they are sample data:
+>
+> ```sql
+> -- Option A: assign all existing notes to one owner
+> UPDATE notes SET user_id = 'user_xxxxxxxx' WHERE user_id IS NULL;
+>
+> -- Option B: drop legacy sample notes
+> DELETE FROM notes;
+> ```
 | `SESSION_SECRET` | yes | Session signing secret for the API server |
 
 On Replit, Clerk keys are auto-provisioned. You only need to set `AGENT_API_KEY` yourself.

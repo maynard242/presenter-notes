@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
-import { shadcn } from "@clerk/themes";
+import { shadcn, dark } from "@clerk/themes";
 import { useEffect, useRef } from "react";
 import LandingPage from "@/pages/landing-page";
 import NotesList from "@/pages/notes-list";
@@ -32,6 +32,7 @@ if (!clerkPubKey) {
 }
 
 const clerkAppearance = {
+  baseTheme: dark,
   theme: shadcn,
   cssLayerName: "clerk",
   options: {
@@ -40,14 +41,14 @@ const clerkAppearance = {
     logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
   },
   variables: {
-    colorPrimary: "hsl(30 90% 40%)",
-    colorForeground: "hsl(20 10% 10%)",
-    colorMutedForeground: "hsl(20 5% 40%)",
-    colorDanger: "hsl(0 70% 50%)",
-    colorBackground: "hsl(40 20% 98%)",
-    colorInput: "hsl(40 20% 85%)",
-    colorInputForeground: "hsl(20 10% 10%)",
-    colorNeutral: "hsl(40 20% 85%)",
+    colorPrimary: "hsl(35 90% 50%)",
+    colorForeground: "hsl(40 30% 90%)",
+    colorMutedForeground: "hsl(40 10% 60%)",
+    colorDanger: "hsl(0 60% 40%)",
+    colorBackground: "hsl(20 10% 12%)",
+    colorInput: "hsl(20 10% 25%)",
+    colorInputForeground: "hsl(40 30% 90%)",
+    colorNeutral: "hsl(20 10% 25%)",
     fontFamily: "'Geist', 'Inter', sans-serif",
     borderRadius: "0.5rem",
   },

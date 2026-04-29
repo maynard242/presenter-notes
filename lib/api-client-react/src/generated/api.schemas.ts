@@ -11,6 +11,8 @@ export interface HealthStatus {
 
 export interface Note {
   id: number;
+  /** Clerk user id of the note owner (server-assigned) */
+  userId: string;
   title: string;
   event: string;
   /**

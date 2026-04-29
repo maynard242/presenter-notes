@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { eq, ilike, or, sql, desc } from "drizzle-orm";
+import { and, eq, ilike, or, sql, desc } from "drizzle-orm";
 import { db, notesTable } from "@workspace/db";
 import {
   ListNotesQueryParams,
@@ -16,6 +16,7 @@ import {
 const router: IRouter = Router();
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY ?? "";
+const AGENT_OWNER_USER_ID = process.env.AGENT_OWNER_USER_ID ?? "";
 
 function requireAuth(req: any, res: any, next: any): void {
   const auth = getAuth(req);
@@ -78,44 +79,57 @@ router.get("/notes", requireAuth, async (req, res): Promise<void> => {
   }
 
   const { search, event } = params.data;
+  const ownerFilter = eq(notesTable.userId, req.userId as string);
 
   let query = db.select().from(notesTable).$dynamic();
 
   if (search) {
     const searchPattern = `%${search}%`;
     query = query.where(
-      or(
-        ilike(notesTable.title, searchPattern),
-        ilike(notesTable.event, searchPattern),
-        ilike(notesTable.content, searchPattern),
+      and(
+        ownerFilter,
+        or(
+          ilike(notesTable.title, searchPattern),
+          ilike(notesTable.event, searchPattern),
+          ilike(notesTable.content, searchPattern),
+        ),
       ),
     );
   } else if (event) {
-    query = query.where(ilike(notesTable.event, `%${event}%`));
+    query = query.where(and(ownerFilter, ilike(notesTable.event, `%${event}%`)));
+  } else {
+    query = query.where(ownerFilter);
   }
 
   const notes = await query.orderBy(desc(notesTable.eventDate), desc(notesTable.createdAt));
   res.json(notes);
 });
 
-router.get("/notes/events", requireAuth, async (_req, res): Promise<void> => {
+router.get("/notes/events", requireAuth, async (req, res): Promise<void> => {
   const rows = await db
     .selectDistinct({ event: notesTable.event })
     .from(notesTable)
+    .where(eq(notesTable.userId, req.userId as string))
     .orderBy(notesTable.event);
   res.json({ events: rows.map((r) => r.event) });
 });
 
-router.get("/notes/stats", requireAuth, async (_req, res): Promise<void> => {
+router.get("/notes/stats", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId as string;
+  const ownerFilter = eq(notesTable.userId, userId);
+
   const totalNotesResult = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(notesTable);
+    .from(notesTable)
+    .where(ownerFilter);
   const totalEventsResult = await db
     .selectDistinct({ event: notesTable.event })
-    .from(notesTable);
+    .from(notesTable)
+    .where(ownerFilter);
   const recentNotes = await db
     .select()
     .from(notesTable)
+    .where(ownerFilter)
     .orderBy(desc(notesTable.createdAt))
     .limit(5);
   const topEventsResult = await db
@@ -124,6 +138,7 @@ router.get("/notes/stats", requireAuth, async (_req, res): Promise<void> => {
       count: sql<number>`count(*)::int`,
     })
     .from(notesTable)
+    .where(ownerFilter)
     .groupBy(notesTable.event)
     .orderBy(desc(sql<number>`count(*)`))
     .limit(5);
@@ -153,6 +168,7 @@ router.post("/notes/upload", requireAuth, async (req, res): Promise<void> => {
   const [note] = await db
     .insert(notesTable)
     .values({
+      userId: req.userId as string,
       title,
       event,
       eventDate: fm.eventDate ?? null,
@@ -179,6 +195,11 @@ router.post("/notes/agent-upload", async (req, res): Promise<void> => {
     return;
   }
 
+  if (!AGENT_OWNER_USER_ID) {
+    res.status(503).json({ error: "Agent owner not configured" });
+    return;
+  }
+
   const fm = parseFrontmatter(content);
   const title = overrideTitle ?? fm.title ?? filename.replace(/\.md$/i, "").replace(/[-_]/g, " ");
   const event = overrideEvent ?? fm.event ?? "Uncategorized";
@@ -187,6 +208,7 @@ router.post("/notes/agent-upload", async (req, res): Promise<void> => {
   const [note] = await db
     .insert(notesTable)
     .values({
+      userId: AGENT_OWNER_USER_ID,
       title,
       event,
       eventDate: eventDate ?? fm.eventDate ?? null,
@@ -210,6 +232,7 @@ router.post("/notes", requireAuth, async (req, res): Promise<void> => {
     .insert(notesTable)
     .values({
       ...parsed.data,
+      userId: req.userId as string,
       tags: parsed.data.tags ?? [],
       eventDate: parsed.data.eventDate ?? null,
       filename: parsed.data.filename ?? null,
@@ -230,7 +253,12 @@ router.get("/notes/:id", requireAuth, async (req, res): Promise<void> => {
   const [note] = await db
     .select()
     .from(notesTable)
-    .where(eq(notesTable.id, params.data.id));
+    .where(
+      and(
+        eq(notesTable.id, params.data.id),
+        eq(notesTable.userId, req.userId as string),
+      ),
+    );
 
   if (!note) {
     res.status(404).json({ error: "Note not found" });
@@ -257,7 +285,12 @@ router.patch("/notes/:id", requireAuth, async (req, res): Promise<void> => {
   const [note] = await db
     .update(notesTable)
     .set(parsed.data)
-    .where(eq(notesTable.id, params.data.id))
+    .where(
+      and(
+        eq(notesTable.id, params.data.id),
+        eq(notesTable.userId, req.userId as string),
+      ),
+    )
     .returning();
 
   if (!note) {
@@ -278,7 +311,12 @@ router.delete("/notes/:id", requireAuth, async (req, res): Promise<void> => {
 
   const [note] = await db
     .delete(notesTable)
-    .where(eq(notesTable.id, params.data.id))
+    .where(
+      and(
+        eq(notesTable.id, params.data.id),
+        eq(notesTable.userId, req.userId as string),
+      ),
+    )
     .returning();
 
   if (!note) {

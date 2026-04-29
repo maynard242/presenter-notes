@@ -3,11 +3,12 @@ import { timingSafeEqual } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import { eq, ilike, or, desc } from "drizzle-orm";
+import { and, eq, ilike, or, desc } from "drizzle-orm";
 import { db, notesTable } from "@workspace/db";
 import { logger } from "./lib/logger";
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY ?? "";
+const AGENT_OWNER_USER_ID = process.env.AGENT_OWNER_USER_ID ?? "";
 
 function parseFrontmatter(raw: string): {
   title: string | null;
@@ -102,6 +103,15 @@ function createMcpServer(): McpServer {
       },
     },
     async ({ filename, content, title, event, eventDate, tags }) => {
+      if (!AGENT_OWNER_USER_ID) {
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: "Agent owner not configured (AGENT_OWNER_USER_ID is unset)." },
+          ],
+        };
+      }
+
       const fm = parseFrontmatter(content);
       const finalTitle =
         title ??
@@ -113,6 +123,7 @@ function createMcpServer(): McpServer {
       const [note] = await db
         .insert(notesTable)
         .values({
+          userId: AGENT_OWNER_USER_ID,
           title: finalTitle,
           event: finalEvent,
           eventDate: eventDate ?? fm.eventDate ?? null,
@@ -153,10 +164,22 @@ function createMcpServer(): McpServer {
       },
     },
     async ({ event, limit }) => {
+      if (!AGENT_OWNER_USER_ID) {
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: "Agent owner not configured (AGENT_OWNER_USER_ID is unset)." },
+          ],
+        };
+      }
+
       const max = limit ?? 25;
+      const ownerFilter = eq(notesTable.userId, AGENT_OWNER_USER_ID);
       let q = db.select().from(notesTable).$dynamic();
       if (event) {
-        q = q.where(ilike(notesTable.event, `%${event}%`));
+        q = q.where(and(ownerFilter, ilike(notesTable.event, `%${event}%`)));
+      } else {
+        q = q.where(ownerFilter);
       }
       const rows = await q
         .orderBy(desc(notesTable.eventDate), desc(notesTable.createdAt))
@@ -196,16 +219,28 @@ function createMcpServer(): McpServer {
       },
     },
     async ({ query, limit }) => {
+      if (!AGENT_OWNER_USER_ID) {
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: "Agent owner not configured (AGENT_OWNER_USER_ID is unset)." },
+          ],
+        };
+      }
+
       const max = limit ?? 25;
       const pattern = `%${query}%`;
       const rows = await db
         .select()
         .from(notesTable)
         .where(
-          or(
-            ilike(notesTable.title, pattern),
-            ilike(notesTable.event, pattern),
-            ilike(notesTable.content, pattern),
+          and(
+            eq(notesTable.userId, AGENT_OWNER_USER_ID),
+            or(
+              ilike(notesTable.title, pattern),
+              ilike(notesTable.event, pattern),
+              ilike(notesTable.content, pattern),
+            ),
           ),
         )
         .orderBy(desc(notesTable.eventDate), desc(notesTable.createdAt))
@@ -241,10 +276,24 @@ function createMcpServer(): McpServer {
       },
     },
     async ({ id }) => {
+      if (!AGENT_OWNER_USER_ID) {
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: "Agent owner not configured (AGENT_OWNER_USER_ID is unset)." },
+          ],
+        };
+      }
+
       const [note] = await db
         .select()
         .from(notesTable)
-        .where(eq(notesTable.id, id));
+        .where(
+          and(
+            eq(notesTable.id, id),
+            eq(notesTable.userId, AGENT_OWNER_USER_ID),
+          ),
+        );
 
       if (!note) {
         return {

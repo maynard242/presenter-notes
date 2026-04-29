@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Presenter Notes"
+version = "1.0.0"
+id = "artifacts/presenter-notes"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20684
+
+[services.development]
+run = "pnpm --filter @workspace/presenter-notes run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/presenter-notes", "run", "build" ]
+publicDir = "artifacts/presenter-notes/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20684"
+BASE_PATH = "/"

@@ -248,6 +248,9 @@ components:
       properties:
         id:
           type: integer
+        userId:
+          type: string
+          description: Clerk user id of the note owner (server-assigned)
         title:
           type: string
         event:
@@ -271,6 +274,7 @@ components:
           type: string
       required:
         - id
+        - userId
         - title
         - event
         - eventDate

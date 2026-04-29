@@ -52,4 +52,10 @@ app.use(
 app.use("/api", mcpRouter);
 app.use("/api", router);
 
+if (process.env.AGENT_API_KEY && !process.env.AGENT_OWNER_USER_ID) {
+  logger.warn(
+    "AGENT_API_KEY is set but AGENT_OWNER_USER_ID is not. Agent REST endpoint and MCP tools will fail-closed until AGENT_OWNER_USER_ID is configured.",
+  );
+}
+
 export default app;

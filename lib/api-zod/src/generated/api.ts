@@ -32,6 +32,9 @@ export const ListNotesQueryParams = zod.object({
 
 export const ListNotesResponseItem = zod.object({
   id: zod.number(),
+  userId: zod
+    .string()
+    .describe("Clerk user id of the note owner (server-assigned)"),
   title: zod.string(),
   event: zod.string(),
   eventDate: zod
@@ -77,6 +80,9 @@ export const GetNotesStatsResponse = zod.object({
   recentNotes: zod.array(
     zod.object({
       id: zod.number(),
+      userId: zod
+        .string()
+        .describe("Clerk user id of the note owner (server-assigned)"),
       title: zod.string(),
       event: zod.string(),
       eventDate: zod
@@ -108,6 +114,9 @@ export const GetNoteParams = zod.object({
 
 export const GetNoteResponse = zod.object({
   id: zod.number(),
+  userId: zod
+    .string()
+    .describe("Clerk user id of the note owner (server-assigned)"),
   title: zod.string(),
   event: zod.string(),
   eventDate: zod
@@ -139,6 +148,9 @@ export const UpdateNoteBody = zod.object({
 
 export const UpdateNoteResponse = zod.object({
   id: zod.number(),
+  userId: zod
+    .string()
+    .describe("Clerk user id of the note owner (server-assigned)"),
   title: zod.string(),
   event: zod.string(),
   eventDate: zod
