@@ -187,7 +187,38 @@ Most MCP-aware clients accept the same Streamable HTTP URL directly. Point them 
 
 ## Deployment
 
-This app is built to deploy on [Replit Deployments](https://docs.replit.com/category/deployments). After deploying:
+### Vercel (recommended)
+
+This repo ships with a [`vercel.json`](./vercel.json) that:
+
+- Builds the Vite frontend to `artifacts/presenter-notes/dist/public` (served as static assets).
+- Bundles the Express API into a single Node serverless function at `api/index.mjs` and rewrites all `/api/*` requests to it.
+
+**Steps:**
+
+1. Push the repo to GitHub and import it into Vercel.
+2. Vercel auto-detects `pnpm` from `pnpm-lock.yaml`. Leave the framework preset as **Other** — `vercel.json` overrides build/output paths.
+3. In **Project Settings → Environment Variables**, set:
+   - `DATABASE_URL`
+   - `CLERK_SECRET_KEY`
+   - `CLERK_PUBLISHABLE_KEY`
+   - `VITE_CLERK_PUBLISHABLE_KEY` (same value)
+   - `SESSION_SECRET`
+   - `AGENT_API_KEY` (any strong random string)
+   - `AGENT_OWNER_USER_ID` (Clerk user id that owns agent-uploaded notes)
+4. Deploy. The build runs `pnpm run vercel-build`, which bundles the server (`pnpm --filter @workspace/api-server run build:vercel`) and builds the frontend.
+5. Run `pnpm --filter @workspace/db run push` against your production database once to create tables (locally with `DATABASE_URL` pointing at prod, or via a Vercel CLI one-shot).
+6. Update your Claude Desktop / Cursor / agent config with the deployed URL: `https://<your-app>.vercel.app/api/mcp`.
+
+**Notes:**
+
+- The MCP endpoint runs in stateless Streamable HTTP mode, which fits Vercel's request/response model. Function `maxDuration` is set to 30s in `vercel.json`; raise it on Pro plans if a tool needs longer.
+- The Clerk Frontend API proxy (`/api/__clerk/*`) runs inside the same function. Custom domains work without DNS CNAME setup.
+- `api/index.mjs` is generated at build time and gitignored.
+
+### Replit
+
+This app also runs on [Replit Deployments](https://docs.replit.com/category/deployments). After deploying:
 
 1. Set `AGENT_API_KEY` in the Secrets tab (any strong random string).
 2. Restart the API Server workflow.
