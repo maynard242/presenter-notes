@@ -3,8 +3,5 @@
   "buildCommand": "pnpm -w run vercel-build",
   "installCommand": "pnpm install --no-frozen-lockfile",
   "outputDirectory": "artifacts/presenter-notes/dist/public",
-  "framework": null,
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" }
-  ]
+  "framework": null
 }

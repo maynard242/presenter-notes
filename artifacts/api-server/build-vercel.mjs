@@ -24,7 +24,11 @@ async function buildVercel() {
     target: "node20",
     bundle: true,
     format: "esm",
-    outfile: path.resolve(outDir, "index.mjs"),
+    // Catch-all filename: Vercel routes all /api/* requests to this single
+    // function with the original request URL preserved. With a plain
+    // `index.mjs` we would have needed a rewrite, and Vercel rewrites strip
+    // the captured path unless every sub-path also has a function.
+    outfile: path.resolve(outDir, "[...path].mjs"),
     logLevel: "info",
     conditions: ["workspace"],
     external: [

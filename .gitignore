@@ -50,5 +50,4 @@ Thumbs.db
 
 # Vercel
 .vercel
-/api/index.mjs
-/api/index.mjs.map
+/api/
