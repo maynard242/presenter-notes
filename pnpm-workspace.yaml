@@ -77,8 +77,10 @@ overrides:
   esbuild>@esbuild/android-arm: '-'
   esbuild>@esbuild/android-arm64: '-'
   esbuild>@esbuild/android-x64: '-'
-  esbuild>@esbuild/darwin-arm64: '-'
-  esbuild>@esbuild/darwin-x64: '-'
+  # darwin binaries kept available for local dev on macOS — drizzle-kit uses
+  # esbuild internally and breaks without the matching native binary.
+  # esbuild>@esbuild/darwin-arm64: '-'
+  # esbuild>@esbuild/darwin-x64: '-'
   esbuild>@esbuild/freebsd-arm64: '-'
   esbuild>@esbuild/freebsd-x64: '-'
   esbuild>@esbuild/linux-arm: '-'

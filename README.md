@@ -194,16 +194,13 @@ Most MCP-aware clients accept the same Streamable HTTP URL directly. Point them 
 
 ### Vercel (recommended)
 
-This repo ships with a [`vercel.json`](./vercel.json) that:
-
-- Builds the Vite frontend to `artifacts/presenter-notes/dist/public` (served as static assets).
-- Bundles the Express API into a single Node serverless function at `api/index.mjs` and rewrites all `/api/*` requests to it.
+The build uses Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3) — `scripts/finalize-vercel.mjs` assembles `.vercel/output/` directly, with the bundled Express app at `functions/api.func/` and the Vite SPA at `static/`. Routing is set explicitly in `config.json`, so there's no reliance on framework auto-detection or filename conventions.
 
 **Steps:**
 
 1. Push the repo to GitHub and import it into Vercel.
-2. Vercel auto-detects `pnpm` from `pnpm-lock.yaml`. Leave the framework preset as **Other** — `vercel.json` overrides build/output paths.
-3. In **Project Settings → Environment Variables**, set:
+2. Leave the framework preset as **Other**. In **Settings → Build & Output Settings**, leave all overrides off — `vercel.json` provides the build and install commands.
+3. In **Settings → Environment Variables**, set:
    - `DATABASE_URL`
    - `CLERK_SECRET_KEY`
    - `CLERK_PUBLISHABLE_KEY`
@@ -211,15 +208,16 @@ This repo ships with a [`vercel.json`](./vercel.json) that:
    - `SESSION_SECRET`
    - `AGENT_API_KEY` (any strong random string)
    - `AGENT_OWNER_USER_ID` (Clerk user id that owns agent-uploaded notes)
-4. Deploy. The build runs `pnpm run vercel-build`, which bundles the server (`pnpm --filter @workspace/api-server run build:vercel`) and builds the frontend.
+   - `CORS_ORIGIN` (only if the frontend is hosted on a different origin from the API)
+4. Deploy. `vercel-build` chains: API bundle → Vite build → `finalize-vercel.mjs` (writes `.vercel/output/`).
 5. Run `pnpm --filter @workspace/db run push` against your production database once to create tables (locally with `DATABASE_URL` pointing at prod, or via a Vercel CLI one-shot).
 6. Update your Claude Desktop / Cursor / agent config with the deployed URL: `https://<your-app>.vercel.app/api/mcp`.
 
 **Notes:**
 
-- The MCP endpoint runs in stateless Streamable HTTP mode, which fits Vercel's request/response model. Function `maxDuration` is set to 30s in `vercel.json`; raise it on Pro plans if a tool needs longer.
+- The MCP endpoint runs in stateless Streamable HTTP mode, which fits Vercel's request/response model. `maxDuration: 30` is exported from `artifacts/api-server/src/handler.ts`; raise it on Pro plans if a tool needs longer.
 - The Clerk Frontend API proxy (`/api/__clerk/*`) runs inside the same function. Custom domains work without DNS CNAME setup.
-- `api/index.mjs` is generated at build time and gitignored.
+- `.vercel/output/` is generated at build time and gitignored.
 
 ### Replit
 
