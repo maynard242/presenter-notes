@@ -41,7 +41,7 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
     setIsSuccess(false);
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
-      if (!selectedFile.name.endsWith('.md')) {
+      if (!selectedFile.name.toLowerCase().endsWith('.md')) {
         setError("Only markdown (.md) files are supported.");
         return;
       }

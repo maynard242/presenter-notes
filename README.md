@@ -67,6 +67,7 @@ The frontend is served at `/`, the API at `/api`. Access them through your dev s
 | `VITE_CLERK_PUBLISHABLE_KEY` | yes | Same key, exposed to the Vite frontend |
 | `AGENT_API_KEY` | yes (for agents) | Shared secret protecting both REST `/api/notes/agent-upload` and MCP `/api/mcp`. Choose any strong random string. |
 | `AGENT_OWNER_USER_ID` | yes (for agents) | Clerk user id (e.g. `user_2abc...`) that owns notes created or read by the agent surfaces. Required for agent endpoints; if unset, agent uploads return 503 and MCP tools return an error. Find your id in Clerk's dashboard or by signing in and checking `auth.userId`. |
+| `CORS_ORIGIN` | no | Comma-separated allowlist of origins permitted to make credentialed cross-origin requests (e.g. `https://app.example.com`). Leave unset for single-domain deployments (Vercel/Replit) — same-origin requests don't need CORS. Do not use `*` here; credentialed CORS forbids wildcards. |
 
 > **Upgrading from a pre-ownership build:** the `notes` table now has a `user_id text not null` column. If you have existing rows (created before this version), back-fill them with the owner's Clerk user id before running `pnpm --filter @workspace/db run push --force`, or delete them if they are sample data:
 >
@@ -118,11 +119,15 @@ pnpm --filter @workspace/api-spec run codegen
 
 ### Agent REST upload
 
+Auth is via `Authorization: Bearer <AGENT_API_KEY>` (or `X-API-Key`). The legacy
+`apiKey` body field is still accepted but discouraged — body fields leak into
+request-body logs.
+
 ```bash
 curl -X POST https://<your-domain>/api/notes/agent-upload \
   -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <AGENT_API_KEY>' \
   -d '{
-    "apiKey": "<AGENT_API_KEY>",
     "filename": "my-talk.md",
     "content": "---\ntitle: My Talk\nevent: AI Conf 2025\ndate: 2025-06-01\ntags: [AI, product]\n---\n\n## Opening\n..."
   }'

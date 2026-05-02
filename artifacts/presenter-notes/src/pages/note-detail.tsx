@@ -1,5 +1,12 @@
 import { useParams, Link, useLocation } from "wouter";
-import { useGetNote, getGetNoteQueryKey, useDeleteNote } from "@workspace/api-client-react";
+import {
+  useGetNote,
+  getGetNoteQueryKey,
+  useDeleteNote,
+  getListNotesQueryKey,
+  getGetNotesStatsQueryKey,
+  getListEventsQueryKey,
+} from "@workspace/api-client-react";
 import { ArrowLeft, Calendar, Tag, Trash2, Edit } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -35,8 +42,9 @@ export default function NoteDetail() {
   const deleteMutation = useDeleteNote({
     mutation: {
       onSuccess: () => {
-        // Clear queries and go back to list
-        queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+        queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetNotesStatsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
         setLocation("/notes");
       }
     }

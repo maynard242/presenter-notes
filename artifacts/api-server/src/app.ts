@@ -36,7 +36,14 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-app.use(cors({ credentials: true, origin: true }));
+// CORS: lock down by default. Set CORS_ORIGIN to a comma-separated allowlist
+// (e.g. "https://app.example.com") in production. Falls back to same-origin
+// only when unset, which is correct for single-domain deployments (Vercel,
+// Replit) where the SPA and API share the host.
+const corsOrigin = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean)
+  : false;
+app.use(cors({ credentials: true, origin: corsOrigin }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 

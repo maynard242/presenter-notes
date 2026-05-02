@@ -1,70 +1,47 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { timingSafeEqual } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import { and, eq, ilike, or, desc } from "drizzle-orm";
-import { db, notesTable } from "@workspace/db";
 import { logger } from "./lib/logger";
+import { checkAgentApiKey } from "./lib/agentAuth";
+import {
+  createNoteFromMarkdown,
+  getNoteForUser,
+  listNotesForUser,
+  searchNotesForUser,
+} from "./lib/notesService";
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY ?? "";
 const AGENT_OWNER_USER_ID = process.env.AGENT_OWNER_USER_ID ?? "";
 
-function parseFrontmatter(raw: string): {
-  title: string | null;
-  event: string | null;
-  eventDate: string | null;
-  tags: string[];
-  body: string;
-} {
-  const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-  const match = raw.match(frontmatterRegex);
-
-  if (!match) {
-    return { title: null, event: null, eventDate: null, tags: [], body: raw };
-  }
-
-  const yamlBlock = match[1];
-  const body = match[2];
-
-  const titleMatch = yamlBlock.match(/^title:\s*(.+)$/m);
-  const eventMatch = yamlBlock.match(/^event:\s*(.+)$/m);
-  const dateMatch = yamlBlock.match(/^(?:date|eventDate):\s*(.+)$/m);
-  const tagsMatch = yamlBlock.match(/^tags:\s*\[([^\]]*)\]/m);
-  const tagsListMatch = yamlBlock.match(/^tags:\s*\n((?:\s+-\s*.+\n?)+)/m);
-
-  let tags: string[] = [];
-  if (tagsMatch) {
-    tags = tagsMatch[1]
-      .split(",")
-      .map((t) => t.trim().replace(/['"]/g, ""))
-      .filter(Boolean);
-  } else if (tagsListMatch) {
-    tags = tagsListMatch[1]
-      .split("\n")
-      .map((l) => l.replace(/^\s*-\s*/, "").trim())
-      .filter(Boolean);
-  }
-
+function ownerNotConfigured() {
   return {
-    title: titleMatch ? titleMatch[1].trim().replace(/^['"]|['"]$/g, "") : null,
-    event: eventMatch ? eventMatch[1].trim().replace(/^['"]|['"]$/g, "") : null,
-    eventDate: dateMatch ? dateMatch[1].trim().replace(/^['"]|['"]$/g, "") : null,
-    tags,
-    body: body.trim(),
+    isError: true as const,
+    content: [
+      {
+        type: "text" as const,
+        text: "Agent owner not configured (AGENT_OWNER_USER_ID is unset).",
+      },
+    ],
+  };
+}
+
+function preview(n: { id: number; title: string; event: string; eventDate: string | null; tags: string[]; content: string }) {
+  return {
+    id: n.id,
+    title: n.title,
+    event: n.event,
+    eventDate: n.eventDate,
+    tags: n.tags,
+    preview: (n.content ?? "").slice(0, 240),
   };
 }
 
 function createMcpServer(): McpServer {
   const server = new McpServer(
+    { name: "presenter-notes", version: "1.0.0" },
     {
-      name: "presenter-notes",
-      version: "1.0.0",
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
+      capabilities: { tools: {} },
       instructions:
         "Personal presenter notes server. Use these tools to upload markdown notes, list/search existing talking points, and retrieve full note content. Notes are organized by event and date.",
     },
@@ -84,55 +61,23 @@ function createMcpServer(): McpServer {
           .describe(
             "Full markdown content. May start with YAML frontmatter:\n---\ntitle: My Talk\nevent: AI Conf 2025\ndate: 2025-06-01\ntags: [AI, product]\n---\n\n## Body...",
           ),
-        title: z
-          .string()
-          .optional()
-          .describe("Optional title (overrides frontmatter)"),
-        event: z
-          .string()
-          .optional()
-          .describe("Optional event name (overrides frontmatter)"),
+        title: z.string().optional().describe("Optional title (overrides frontmatter)"),
+        event: z.string().optional().describe("Optional event name (overrides frontmatter)"),
         eventDate: z
           .string()
           .optional()
           .describe("Optional event date in YYYY-MM-DD format (overrides frontmatter)"),
-        tags: z
-          .array(z.string())
-          .optional()
-          .describe("Optional tags array (overrides frontmatter)"),
+        tags: z.array(z.string()).optional().describe("Optional tags array (overrides frontmatter)"),
       },
     },
     async ({ filename, content, title, event, eventDate, tags }) => {
-      if (!AGENT_OWNER_USER_ID) {
-        return {
-          isError: true,
-          content: [
-            { type: "text", text: "Agent owner not configured (AGENT_OWNER_USER_ID is unset)." },
-          ],
-        };
-      }
-
-      const fm = parseFrontmatter(content);
-      const finalTitle =
-        title ??
-        fm.title ??
-        filename.replace(/\.md$/i, "").replace(/[-_]/g, " ");
-      const finalEvent = event ?? fm.event ?? "Uncategorized";
-      const body = fm.body || content;
-
-      const [note] = await db
-        .insert(notesTable)
-        .values({
-          userId: AGENT_OWNER_USER_ID,
-          title: finalTitle,
-          event: finalEvent,
-          eventDate: eventDate ?? fm.eventDate ?? null,
-          content: body,
-          tags: tags ?? fm.tags,
-          filename,
-        })
-        .returning();
-
+      if (!AGENT_OWNER_USER_ID) return ownerNotConfigured();
+      const note = await createNoteFromMarkdown(
+        AGENT_OWNER_USER_ID,
+        filename,
+        content,
+        { title, event, eventDate, tags },
+      );
       return {
         content: [
           {
@@ -164,40 +109,13 @@ function createMcpServer(): McpServer {
       },
     },
     async ({ event, limit }) => {
-      if (!AGENT_OWNER_USER_ID) {
-        return {
-          isError: true,
-          content: [
-            { type: "text", text: "Agent owner not configured (AGENT_OWNER_USER_ID is unset)." },
-          ],
-        };
-      }
-
-      const max = limit ?? 25;
-      const ownerFilter = eq(notesTable.userId, AGENT_OWNER_USER_ID);
-      let q = db.select().from(notesTable).$dynamic();
-      if (event) {
-        q = q.where(and(ownerFilter, ilike(notesTable.event, `%${event}%`)));
-      } else {
-        q = q.where(ownerFilter);
-      }
-      const rows = await q
-        .orderBy(desc(notesTable.eventDate), desc(notesTable.createdAt))
-        .limit(max);
-
-      const summaries = rows.map((n) => ({
-        id: n.id,
-        title: n.title,
-        event: n.event,
-        eventDate: n.eventDate,
-        tags: n.tags,
-        preview: (n.content ?? "").slice(0, 240),
-      }));
-
+      if (!AGENT_OWNER_USER_ID) return ownerNotConfigured();
+      const rows = await listNotesForUser(AGENT_OWNER_USER_ID, {
+        event,
+        limit: limit ?? 25,
+      });
       return {
-        content: [
-          { type: "text", text: JSON.stringify(summaries, null, 2) },
-        ],
+        content: [{ type: "text", text: JSON.stringify(rows.map(preview), null, 2) }],
       };
     },
   );
@@ -219,46 +137,10 @@ function createMcpServer(): McpServer {
       },
     },
     async ({ query, limit }) => {
-      if (!AGENT_OWNER_USER_ID) {
-        return {
-          isError: true,
-          content: [
-            { type: "text", text: "Agent owner not configured (AGENT_OWNER_USER_ID is unset)." },
-          ],
-        };
-      }
-
-      const max = limit ?? 25;
-      const pattern = `%${query}%`;
-      const rows = await db
-        .select()
-        .from(notesTable)
-        .where(
-          and(
-            eq(notesTable.userId, AGENT_OWNER_USER_ID),
-            or(
-              ilike(notesTable.title, pattern),
-              ilike(notesTable.event, pattern),
-              ilike(notesTable.content, pattern),
-            ),
-          ),
-        )
-        .orderBy(desc(notesTable.eventDate), desc(notesTable.createdAt))
-        .limit(max);
-
-      const summaries = rows.map((n) => ({
-        id: n.id,
-        title: n.title,
-        event: n.event,
-        eventDate: n.eventDate,
-        tags: n.tags,
-        preview: (n.content ?? "").slice(0, 240),
-      }));
-
+      if (!AGENT_OWNER_USER_ID) return ownerNotConfigured();
+      const rows = await searchNotesForUser(AGENT_OWNER_USER_ID, query, limit ?? 25);
       return {
-        content: [
-          { type: "text", text: JSON.stringify(summaries, null, 2) },
-        ],
+        content: [{ type: "text", text: JSON.stringify(rows.map(preview), null, 2) }],
       };
     },
   );
@@ -276,72 +158,25 @@ function createMcpServer(): McpServer {
       },
     },
     async ({ id }) => {
-      if (!AGENT_OWNER_USER_ID) {
-        return {
-          isError: true,
-          content: [
-            { type: "text", text: "Agent owner not configured (AGENT_OWNER_USER_ID is unset)." },
-          ],
-        };
-      }
-
-      const [note] = await db
-        .select()
-        .from(notesTable)
-        .where(
-          and(
-            eq(notesTable.id, id),
-            eq(notesTable.userId, AGENT_OWNER_USER_ID),
-          ),
-        );
-
+      if (!AGENT_OWNER_USER_ID) return ownerNotConfigured();
+      const note = await getNoteForUser(AGENT_OWNER_USER_ID, id);
       if (!note) {
         return {
           isError: true,
           content: [{ type: "text", text: `No note found with id ${id}` }],
         };
       }
-
-      return {
-        content: [
-          { type: "text", text: JSON.stringify(note, null, 2) },
-        ],
-      };
+      return { content: [{ type: "text", text: JSON.stringify(note, null, 2) }] };
     },
   );
 
   return server;
 }
 
-function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "utf8");
-  const bb = Buffer.from(b, "utf8");
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-}
-
-function extractToken(req: Request): string | null {
-  const auth = req.headers["authorization"];
-  if (typeof auth === "string") {
-    const match = auth.match(/^Bearer\s+(.+)$/i);
-    if (match) return match[1].trim();
-  }
-  const xHeader = req.headers["x-api-key"];
-  if (typeof xHeader === "string" && xHeader.trim()) return xHeader.trim();
-  return null;
-}
-
-function checkApiKey(req: Request): boolean {
-  if (!AGENT_API_KEY) return false;
-  const token = extractToken(req);
-  if (!token) return false;
-  return safeEqual(token, AGENT_API_KEY);
-}
-
 const router: IRouter = Router();
 
 async function handleMcp(req: Request, res: Response): Promise<void> {
-  if (!checkApiKey(req)) {
+  if (!checkAgentApiKey(req, AGENT_API_KEY)) {
     res
       .status(401)
       .set("WWW-Authenticate", 'Bearer realm="presenter-notes"')
