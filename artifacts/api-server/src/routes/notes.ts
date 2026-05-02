@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { timingSafeEqual } from "node:crypto";
 import { getAuth } from "@clerk/express";
 import { and, eq, ilike, or, sql, desc } from "drizzle-orm";
 import { db, notesTable } from "@workspace/db";
@@ -17,6 +18,13 @@ const router: IRouter = Router();
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY ?? "";
 const AGENT_OWNER_USER_ID = process.env.AGENT_OWNER_USER_ID ?? "";
+
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 function requireAuth(req: any, res: any, next: any): void {
   const auth = getAuth(req);
@@ -190,7 +198,7 @@ router.post("/notes/agent-upload", async (req, res): Promise<void> => {
 
   const { apiKey, filename, content, title: overrideTitle, event: overrideEvent, eventDate, tags } = parsed.data;
 
-  if (!AGENT_API_KEY || apiKey !== AGENT_API_KEY) {
+  if (!AGENT_API_KEY || !safeEqual(apiKey, AGENT_API_KEY)) {
     res.status(401).json({ error: "Invalid API key" });
     return;
   }
