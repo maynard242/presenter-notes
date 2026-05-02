@@ -1,22 +1,34 @@
-// Bundles the Express app into a single Vercel serverless function at
-// <repoRoot>/api/index.mjs. The entrypoint exports the Express app as the
-// default handler, which @vercel/node invokes per request.
+// Builds the Express app into Vercel's Build Output API layout
+// (`.vercel/output/functions/api.func/`). The Build Output API is the
+// documented Vercel format for "I know exactly what I want deployed" — it
+// bypasses framework auto-detection and ambiguous filename conventions.
+//
+// Vercel CLI sees `.vercel/output/` and uses it directly: static files from
+// `static/`, functions from `functions/<name>.func/`, routing from
+// `config.json`. The static side is assembled by `scripts/finalize-vercel.mjs`
+// after the Vite build completes.
 
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(artifactDir, "..", "..");
-const outDir = path.resolve(repoRoot, "api");
+const functionDir = path.resolve(
+  repoRoot,
+  ".vercel",
+  "output",
+  "functions",
+  "api.func",
+);
 
 async function buildVercel() {
-  await rm(outDir, { recursive: true, force: true });
-  await mkdir(outDir, { recursive: true });
+  await rm(functionDir, { recursive: true, force: true });
+  await mkdir(functionDir, { recursive: true });
 
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/handler.ts")],
@@ -24,11 +36,7 @@ async function buildVercel() {
     target: "node20",
     bundle: true,
     format: "esm",
-    // Catch-all filename: Vercel routes all /api/* requests to this single
-    // function with the original request URL preserved. With a plain
-    // `index.mjs` we would have needed a rewrite, and Vercel rewrites strip
-    // the captured path unless every sub-path also has a function.
-    outfile: path.resolve(outDir, "[...path].mjs"),
+    outfile: path.resolve(functionDir, "index.mjs"),
     logLevel: "info",
     conditions: ["workspace"],
     external: [
@@ -54,6 +62,21 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
 `,
     },
   });
+
+  // Function metadata. Tells the Vercel runtime how to invoke the bundle.
+  await writeFile(
+    path.resolve(functionDir, ".vc-config.json"),
+    JSON.stringify(
+      {
+        runtime: "nodejs20.x",
+        handler: "index.mjs",
+        launcherType: "Nodejs",
+        shouldAddHelpers: true,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 buildVercel().catch((err) => {
