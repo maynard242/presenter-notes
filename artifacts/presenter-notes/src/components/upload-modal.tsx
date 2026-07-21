@@ -76,8 +76,8 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
       }
       onOpenChange(v);
     }}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden border-0 shadow-2xl rounded-2xl bg-card">
-        <div className="p-6">
+      <DialogContent className="sm:max-w-md p-0 overflow-hidden border-0 shadow-2xl rounded-2xl bg-card flex flex-col max-h-[90vh]">
+        <div className="p-6 overflow-y-auto">
           <DialogHeader className="mb-6">
             <DialogTitle className="text-2xl font-serif">Upload Note</DialogTitle>
             <DialogDescription className="text-base">
@@ -131,7 +131,7 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
           </div>
         </div>
 
-        <div className="p-6 bg-muted/30 border-t border-border flex justify-end gap-3">
+        <div className="p-6 bg-muted/30 border-t border-border flex justify-end gap-3 shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={uploadMutation.isPending}>
             Cancel
           </Button>
