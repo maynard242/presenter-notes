@@ -10,6 +10,7 @@ import { useEffect, useRef } from "react";
 import LandingPage from "@/pages/landing-page";
 import NotesList from "@/pages/notes-list";
 import NoteDetail from "@/pages/note-detail";
+import { useTheme } from "@/lib/theme";
 
 const queryClient = new QueryClient();
 
@@ -31,8 +32,10 @@ if (!clerkPubKey) {
   throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY in .env file");
 }
 
-const clerkAppearance = {
-  baseTheme: dark,
+function getClerkAppearance(resolvedTheme: "light" | "dark") {
+  const isDark = resolvedTheme === "dark";
+  return {
+  baseTheme: isDark ? dark : undefined,
   theme: shadcn,
   cssLayerName: "clerk",
   options: {
@@ -40,18 +43,31 @@ const clerkAppearance = {
     logoLinkUrl: basePath || "/",
     logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
   },
-  variables: {
-    colorPrimary: "hsl(35 90% 50%)",
-    colorForeground: "hsl(40 30% 90%)",
-    colorMutedForeground: "hsl(40 10% 60%)",
-    colorDanger: "hsl(0 60% 40%)",
-    colorBackground: "hsl(20 10% 12%)",
-    colorInput: "hsl(20 10% 25%)",
-    colorInputForeground: "hsl(40 30% 90%)",
-    colorNeutral: "hsl(20 10% 25%)",
-    fontFamily: "'Geist', 'Inter', sans-serif",
-    borderRadius: "0.5rem",
-  },
+  variables: isDark
+    ? {
+        colorPrimary: "hsl(35 90% 50%)",
+        colorForeground: "hsl(40 30% 90%)",
+        colorMutedForeground: "hsl(40 10% 60%)",
+        colorDanger: "hsl(0 60% 40%)",
+        colorBackground: "hsl(20 10% 12%)",
+        colorInput: "hsl(20 10% 25%)",
+        colorInputForeground: "hsl(40 30% 90%)",
+        colorNeutral: "hsl(20 10% 25%)",
+        fontFamily: "'Geist', 'Inter', sans-serif",
+        borderRadius: "0.5rem",
+      }
+    : {
+        colorPrimary: "hsl(30 90% 40%)",
+        colorForeground: "hsl(20 10% 10%)",
+        colorMutedForeground: "hsl(20 5% 40%)",
+        colorDanger: "hsl(0 70% 50%)",
+        colorBackground: "hsl(40 20% 98%)",
+        colorInput: "hsl(40 20% 85%)",
+        colorInputForeground: "hsl(20 10% 10%)",
+        colorNeutral: "hsl(40 20% 85%)",
+        fontFamily: "'Geist', 'Inter', sans-serif",
+        borderRadius: "0.5rem",
+      },
   elements: {
     rootBox: "w-full flex justify-center",
     cardBox: "bg-card rounded-2xl w-[440px] max-w-full overflow-hidden shadow-xl border border-border",
@@ -79,7 +95,8 @@ const clerkAppearance = {
     formFieldRow: "space-y-2",
     main: "gap-6",
   },
-};
+  };
+}
 
 function ClerkQueryClientCacheInvalidator() {
   const { addListener } = useClerk();
@@ -168,12 +185,13 @@ function ProtectedNoteDetail() {
 
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
+  const { resolvedTheme } = useTheme();
 
   return (
     <ClerkProvider
       publishableKey={clerkPubKey}
       proxyUrl={clerkProxyUrl}
-      appearance={clerkAppearance}
+      appearance={getClerkAppearance(resolvedTheme)}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
       localization={{

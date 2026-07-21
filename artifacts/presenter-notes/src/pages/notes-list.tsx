@@ -15,6 +15,7 @@ import { Search, Plus, Calendar, FileText, User, PenTool } from "lucide-react";
 import { format } from "date-fns";
 import UploadModal from "@/components/upload-modal";
 import CreateNoteModal from "@/components/create-note-modal";
+import ThemeToggle from "@/components/theme-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useClerk } from "@clerk/react";
 
@@ -61,9 +62,12 @@ export default function NotesList() {
             </svg>
             <span className="font-serif font-semibold text-lg">Presenter Notes</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => signOut()} aria-label="Sign out">
-            <User className="h-5 w-5 text-muted-foreground" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" onClick={() => signOut()} aria-label="Sign out">
+              <User className="h-5 w-5 text-muted-foreground" />
+            </Button>
+          </div>
         </div>
       </header>
 

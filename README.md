@@ -13,6 +13,7 @@ Built for speakers who want a quiet, focused space to keep their talks organized
 - **REST endpoint** for any HTTP-capable agent (Replit Agent, Anthropic API tool use, scripts, etc.)
 - **MCP server** at `/api/mcp` for Claude Desktop, Cursor, and other MCP clients — tools: `upload_note`, `list_notes`, `search_notes`, `get_note`
 - **Mobile-friendly** responsive layout
+- **Light and dark mode**, toggled from the header (sun/moon icon) or following the OS preference by default; choice is remembered per-browser
 - Warm amber styling, serif headlines, soft background imagery — calm and focused
 
 ## Tech Stack
