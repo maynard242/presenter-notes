@@ -33,7 +33,7 @@ async function buildVercel() {
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/handler.ts")],
     platform: "node",
-    target: "node20",
+    target: "node24",
     bundle: true,
     format: "esm",
     outfile: path.resolve(functionDir, "index.mjs"),
@@ -68,7 +68,7 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     path.resolve(functionDir, ".vc-config.json"),
     JSON.stringify(
       {
-        runtime: "nodejs20.x",
+        runtime: "nodejs24.x",
         handler: "index.mjs",
         launcherType: "Nodejs",
         shouldAddHelpers: true,

@@ -2,6 +2,9 @@
   "name": "workspace",
   "version": "0.0.0",
   "license": "MIT",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
@@ -11,10 +14,10 @@
   },
   "private": true,
   "devDependencies": {
-    "prettier": "^3.8.1",
-    "typescript": "~5.9.2"
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.3"
   },
   "dependencies": {
-    "@replit/connectors-sdk": "^0.4.0"
+    "@replit/connectors-sdk": "^0.4.2"
   }
 }
