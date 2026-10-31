@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateNote, getListNotesQueryKey, getGetNotesStatsQueryKey } from "@workspace/api-client-react";
+import { useCreateNote, getListNotesQueryKey, getListNoteSummariesQueryKey, getGetNotesStatsQueryKey, getListEventsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
@@ -25,7 +25,9 @@ export default function CreateNoteModal({ open, onOpenChange }: CreateNoteModalP
     mutation: {
       onSuccess: (newNote) => {
         queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListNoteSummariesQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetNotesStatsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
         onOpenChange(false);
         setLocation(`/notes/${newNote.id}`);
       }
@@ -37,6 +39,7 @@ export default function CreateNoteModal({ open, onOpenChange }: CreateNoteModalP
       setTitle("");
       setEvent("");
       setContent("");
+      createMutation.reset();
     }
   }, [open]);
 
@@ -62,6 +65,7 @@ export default function CreateNoteModal({ open, onOpenChange }: CreateNoteModalP
             <Label htmlFor="title">Title</Label>
             <Input 
               id="title" 
+              maxLength={256}
               required 
               value={title} 
               onChange={(e) => setTitle(e.target.value)} 
@@ -72,6 +76,7 @@ export default function CreateNoteModal({ open, onOpenChange }: CreateNoteModalP
             <Label htmlFor="event">Event Name</Label>
             <Input 
               id="event" 
+              maxLength={256}
               required 
               value={event} 
               onChange={(e) => setEvent(e.target.value)} 
@@ -89,6 +94,7 @@ export default function CreateNoteModal({ open, onOpenChange }: CreateNoteModalP
               placeholder="# Introduction..."
             />
           </div>
+          {createMutation.isError && <p role="alert" className="text-sm text-destructive">Could not create note. {createMutation.error?.message}</p>}
           <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={createMutation.isPending}>
               Cancel

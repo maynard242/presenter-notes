@@ -4,13 +4,14 @@ import {
   getGetNoteQueryKey,
   useDeleteNote,
   getListNotesQueryKey,
+  getListNoteSummariesQueryKey,
   getGetNotesStatsQueryKey,
   getListEventsQueryKey,
 } from "@workspace/api-client-react";
 import { ArrowLeft, Calendar, Tag, Trash2, Edit } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { format } from "date-fns";
+import { formatEventDate } from "@/lib/dates";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -30,19 +31,22 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export default function NoteDetail() {
   const { id } = useParams<{ id: string }>();
-  const noteId = parseInt(id || "0", 10);
+  const parsedId = id && /^[1-9]\d*$/.test(id) ? Number(id) : NaN;
+  const validId = Number.isSafeInteger(parsedId) && parsedId <= 2147483647;
+  const noteId = validId ? parsedId : 0;
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [isEditOpen, setIsEditOpen] = useState(false);
 
-  const { data: note, isLoading } = useGetNote(noteId, {
-    query: { enabled: !!noteId, queryKey: getGetNoteQueryKey(noteId) }
+  const { data: note, isLoading, isError, error, refetch } = useGetNote(noteId, {
+    query: { enabled: validId, queryKey: getGetNoteQueryKey(noteId) }
   });
 
   const deleteMutation = useDeleteNote({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListNoteSummariesQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetNotesStatsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
         setLocation("/notes");
@@ -69,10 +73,23 @@ export default function NoteDetail() {
     );
   }
 
-  if (!note) {
+  if (validId && isError && error?.status !== 404) {
+    return (
+      <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center gap-4 p-4">
+        <div role="alert" className="text-center">
+          <h1 className="text-2xl font-serif mb-2">Could not load note</h1>
+          <p className="text-muted-foreground">{error?.message}</p>
+        </div>
+        <Button variant="outline" onClick={() => void refetch()}>Retry note</Button>
+        <Link href="/notes" className="text-primary hover:underline">Return to notes</Link>
+      </div>
+    );
+  }
+
+  if (!validId || !note || (isError && error?.status === 404)) {
     return (
       <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center p-4">
-        <h1 className="text-2xl font-serif mb-4">Note not found</h1>
+        <h1 className="text-2xl font-serif mb-4">{validId ? "Note not found" : "Invalid note ID"}</h1>
         <Link href="/notes" className="text-primary hover:underline flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" /> Return to notes
         </Link>
@@ -84,17 +101,17 @@ export default function NoteDetail() {
     <div className="min-h-[100dvh] bg-background">
       <header className="h-16 border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 h-full flex items-center justify-between">
-          <Link href="/notes" className="inline-flex items-center justify-center h-10 w-10 rounded-full hover:bg-muted transition-colors -ml-2 text-muted-foreground hover:text-foreground">
+          <Link href="/notes" aria-label="Return to notes" className="inline-flex items-center justify-center h-10 w-10 rounded-full hover:bg-muted transition-colors -ml-2 text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-5 w-5" />
           </Link>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => setIsEditOpen(true)} className="text-muted-foreground hover:text-foreground hover:bg-muted">
+            <Button variant="ghost" size="icon" aria-label="Edit note" onClick={() => setIsEditOpen(true)} className="text-muted-foreground hover:text-foreground hover:bg-muted">
               <Edit className="h-4 w-4" />
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+                <Button variant="ghost" size="icon" aria-label="Delete note" disabled={deleteMutation.isPending} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </AlertDialogTrigger>
@@ -109,6 +126,7 @@ export default function NoteDetail() {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction 
                     onClick={() => deleteMutation.mutate({ id: noteId })}
+                    disabled={deleteMutation.isPending}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     Delete
@@ -121,6 +139,7 @@ export default function NoteDetail() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-10 pb-32 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {deleteMutation.isError && <p role="alert" className="text-destructive mb-4">Could not delete note. {deleteMutation.error?.message}</p>}
         <article className="space-y-8">
           {/* Header section */}
           <div className="space-y-4">
@@ -138,7 +157,7 @@ export default function NoteDetail() {
               {note.eventDate && (
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 opacity-70" />
-                  {format(new Date(note.eventDate), "MMMM d, yyyy")}
+                  {formatEventDate(note.eventDate)}
                 </div>
               )}
             </div>

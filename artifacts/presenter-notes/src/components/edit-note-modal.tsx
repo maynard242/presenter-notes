@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useUpdateNote, getGetNoteQueryKey, getListNotesQueryKey, Note } from "@workspace/api-client-react";
+import { useUpdateNote, getGetNoteQueryKey, getListNotesQueryKey, getListNoteSummariesQueryKey, getGetNotesStatsQueryKey, getListEventsQueryKey, Note } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 
@@ -25,6 +25,7 @@ export default function EditNoteModal({ note, open, onOpenChange }: EditNoteModa
       setTitle(note.title);
       setEvent(note.event);
       setContent(note.content);
+      updateMutation.reset();
     }
   }, [open, note]);
 
@@ -33,6 +34,9 @@ export default function EditNoteModal({ note, open, onOpenChange }: EditNoteModa
       onSuccess: (updatedNote) => {
         queryClient.setQueryData(getGetNoteQueryKey(note.id), updatedNote);
         queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListNoteSummariesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetNotesStatsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
         onOpenChange(false);
       }
     }
@@ -61,6 +65,7 @@ export default function EditNoteModal({ note, open, onOpenChange }: EditNoteModa
             <Label htmlFor="edit-title">Title</Label>
             <Input 
               id="edit-title" 
+              maxLength={256}
               required 
               value={title} 
               onChange={(e) => setTitle(e.target.value)} 
@@ -70,6 +75,7 @@ export default function EditNoteModal({ note, open, onOpenChange }: EditNoteModa
             <Label htmlFor="edit-event">Event Name</Label>
             <Input 
               id="edit-event" 
+              maxLength={256}
               required 
               value={event} 
               onChange={(e) => setEvent(e.target.value)} 
@@ -85,6 +91,7 @@ export default function EditNoteModal({ note, open, onOpenChange }: EditNoteModa
               className="min-h-[250px] font-mono text-sm"
             />
           </div>
+          {updateMutation.isError && <p role="alert" className="text-sm text-destructive">Could not save note. {updateMutation.error?.message}</p>}
           <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={updateMutation.isPending}>
               Cancel

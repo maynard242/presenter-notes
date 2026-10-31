@@ -61,11 +61,12 @@ export default defineConfig({
           coerce: {
             query: ['boolean', 'number', 'string'],
             param: ['boolean', 'number', 'string'],
-            body: ['bigint', 'date'],
-            response: ['bigint', 'date'],
+            body: ['bigint'],
+            response: ['bigint'],
           },
         },
-        useDates: true,
+        // Date-only wire values must not roll over through Date coercion.
+        useDates: false,
         useBigInt: true,
       },
     },

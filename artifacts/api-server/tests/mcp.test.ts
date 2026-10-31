@@ -7,8 +7,12 @@ const service = vi.hoisted(() => ({
   getNoteForUser: vi.fn(),
   listNotesForUser: vi.fn(),
   searchNotesForUser: vi.fn(),
+  listNoteSummariesForUser: vi.fn(),
 }));
 vi.mock("../src/lib/notesService", () => service);
+const budgets = vi.hoisted(() => ({ consumeBudget: vi.fn() }));
+vi.mock("../src/lib/resourceGuards", () => budgets);
+import { ServiceError } from "../src/lib/errors";
 vi.mock("../src/lib/logger", () => ({ logger: { error: vi.fn() } }));
 
 let server: Server;
@@ -57,6 +61,35 @@ async function result(res: Response) {
 }
 
 describe("MCP security boundary", () => {
+  it.each([0, 2, 100])("rejects a %i-entry batch without dispatching any tool", async (count) => {
+    const body = Array.from({ length: count }, (_, index) => ({ jsonrpc: "2.0", id: index + 1, method: "tools/call", params: { name: "get_note", arguments: { id: 1 } } }));
+    const res = await fetch(`${base}/api/mcp`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: "Bearer synthetic-agent-key" }, body: JSON.stringify(body) });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: -32600, message: "Batch requests are not supported" } });
+    expect(budgets.consumeBudget).toHaveBeenCalledExactlyOnceWith("user-agent-owner", "request");
+    for (const fn of Object.values(service)) expect(fn).not.toHaveBeenCalled();
+  });
+  it("projects metadata and propagates bounded pagination to the owner-scoped service", async () => {
+    service.listNoteSummariesForUser.mockResolvedValue({ notes: [{ id: 1, preview: "preview" }], hasMore: false });
+    const res = await rpc("tools/call", { name: "list_notes", arguments: { limit: 10, offset: 20 } });
+    expect(res.status).toBe(200);
+    expect(service.listNoteSummariesForUser).toHaveBeenCalledWith("user-agent-owner", { event: undefined, limit: 10, offset: 20 });
+    expect(JSON.parse((await result(res)).result.content[0].text)).toEqual([{ id: 1, preview: "preview" }]);
+  });
+  it("enforces the authenticated request budget before invoking tools", async () => {
+    budgets.consumeBudget.mockRejectedValueOnce(new ServiceError(429, "Request budget exceeded", 60));
+    const res = await rpc("tools/list");
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("60");
+    expect((await result(res)).error.message).toBe("Request budget exceeded");
+  });
+  it("never returns raw SQL or unexpected exception messages from a tool", async () => {
+    service.getNoteForUser.mockRejectedValueOnce(new Error("SELECT synthetic-private-data"));
+    const res = await rpc("tools/call", { name: "get_note", arguments: { id: 1 } });
+    const response = (await result(res)).result;
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toBe("Unable to complete note operation");
+  });
   it.each([null, "wrong-key"])(
     "rejects unauthorized requests: %s",
     async (token) => {
@@ -110,6 +143,6 @@ describe("MCP security boundary", () => {
     });
     expect(res.status).toBe(200);
     expect((await result(res)).result.isError).toBe(true);
-    expect(service.listNotesForUser).not.toHaveBeenCalled();
+    expect(service.listNoteSummariesForUser).not.toHaveBeenCalled();
   });
 });

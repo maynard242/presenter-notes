@@ -7,12 +7,30 @@
  */
 
 export interface CreateNoteBody {
+  /**
+   * @minLength 1
+   * @maxLength 256
+   */
   title: string;
+  /**
+   * @minLength 1
+   * @maxLength 256
+   */
   event: string;
   /** @nullable */
   eventDate?: string | null;
+  /** At most 256 KiB in UTF-8; larger content returns 413. Title and event must not be blank. */
   content: string;
+  /**
+   * @maxItems 32
+   * @items.minLength 1
+   * @items.maxLength 64
+   */
   tags?: string[];
-  /** @nullable */
+  /**
+   * @minLength 1
+   * @maxLength 255
+   * @nullable
+   */
   filename?: string | null;
 }

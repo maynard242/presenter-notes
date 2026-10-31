@@ -16,9 +16,16 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * List all presentation notes, optionally filtered
+ * Legacy full-content array, limited to 10 notes per page. Prefer /notes/page for metadata-only pagination.
  * @summary List notes
  */
+export const listNotesQueryLimitDefault = 10;
+export const listNotesQueryLimitMax = 10;
+
+export const listNotesQueryOffsetDefault = 0;
+export const listNotesQueryOffsetMin = 0;
+export const listNotesQueryOffsetMax = 100000;
+
 export const ListNotesQueryParams = zod.object({
   search: zod.coerce
     .string()
@@ -30,6 +37,18 @@ export const ListNotesQueryParams = zod.object({
     .string()
     .optional()
     .describe("Filter by event name (partial match)"),
+  limit: zod.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(listNotesQueryLimitMax)
+    .default(listNotesQueryLimitDefault),
+  offset: zod.coerce
+    .number()
+    .int()
+    .min(listNotesQueryOffsetMin)
+    .max(listNotesQueryOffsetMax)
+    .default(listNotesQueryOffsetDefault),
 });
 
 export const ListNotesResponseItem = zod.object({
@@ -55,13 +74,30 @@ export const ListNotesResponse = zod.array(ListNotesResponseItem);
  * Create a new presentation note (from markdown upload)
  * @summary Create a note
  */
+export const createNoteBodyTitleMax = 256;
+
+export const createNoteBodyEventMax = 256;
+
+export const createNoteBodyTagsItemMax = 64;
+
+export const createNoteBodyTagsMax = 32;
+
+export const createNoteBodyFilenameMax = 255;
+
 export const CreateNoteBody = zod.object({
-  title: zod.string(),
-  event: zod.string(),
-  eventDate: zod.string().nullish(),
-  content: zod.string(),
-  tags: zod.array(zod.string()).optional(),
-  filename: zod.string().nullish(),
+  title: zod.string().min(1).max(createNoteBodyTitleMax),
+  event: zod.string().min(1).max(createNoteBodyEventMax),
+  eventDate: zod.iso.date().nullish(),
+  content: zod
+    .string()
+    .describe(
+      "At most 256 KiB in UTF-8; larger content returns 413. Title and event must not be blank.",
+    ),
+  tags: zod
+    .array(zod.string().min(1).max(createNoteBodyTagsItemMax))
+    .max(createNoteBodyTagsMax)
+    .optional(),
+  filename: zod.string().min(1).max(createNoteBodyFilenameMax).nullish(),
 });
 
 export const CreateNoteResponse = zod.object({
@@ -80,6 +116,56 @@ export const CreateNoteResponse = zod.object({
   filename: zod.string().nullable().describe("Original uploaded filename"),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+});
+
+/**
+ * @summary List a bounded page of note metadata and previews
+ */
+export const listNoteSummariesQuerySearchMax = 256;
+
+export const listNoteSummariesQueryEventMax = 256;
+
+export const listNoteSummariesQueryLimitDefault = 25;
+export const listNoteSummariesQueryLimitMax = 100;
+
+export const listNoteSummariesQueryOffsetDefault = 0;
+export const listNoteSummariesQueryOffsetMin = 0;
+export const listNoteSummariesQueryOffsetMax = 100000;
+
+export const ListNoteSummariesQueryParams = zod.object({
+  search: zod.coerce.string().max(listNoteSummariesQuerySearchMax).optional(),
+  event: zod.coerce.string().max(listNoteSummariesQueryEventMax).optional(),
+  limit: zod.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(listNoteSummariesQueryLimitMax)
+    .default(listNoteSummariesQueryLimitDefault),
+  offset: zod.coerce
+    .number()
+    .int()
+    .min(listNoteSummariesQueryOffsetMin)
+    .max(listNoteSummariesQueryOffsetMax)
+    .default(listNoteSummariesQueryOffsetDefault),
+});
+
+export const listNoteSummariesResponseNotesItemPreviewMax = 240;
+
+export const ListNoteSummariesResponse = zod.object({
+  notes: zod.array(
+    zod.object({
+      id: zod.int(),
+      title: zod.string(),
+      event: zod.string(),
+      eventDate: zod.string().nullable(),
+      tags: zod.array(zod.string()),
+      filename: zod.string().nullable(),
+      createdAt: zod.string(),
+      updatedAt: zod.string(),
+      preview: zod.string().max(listNoteSummariesResponseNotesItemPreviewMax),
+    }),
+  ),
+  hasMore: zod.boolean(),
 });
 
 /**
@@ -158,13 +244,31 @@ export const UpdateNoteParams = zod.object({
   id: zod.coerce.number().int(),
 });
 
-export const UpdateNoteBody = zod.object({
-  title: zod.string().optional(),
-  event: zod.string().optional(),
-  eventDate: zod.string().nullish(),
-  content: zod.string().optional(),
-  tags: zod.array(zod.string()).optional(),
-});
+export const updateNoteBodyTitleMax = 256;
+
+export const updateNoteBodyEventMax = 256;
+
+export const updateNoteBodyTagsItemMax = 64;
+
+export const updateNoteBodyTagsMax = 32;
+
+export const UpdateNoteBody = zod
+  .object({
+    title: zod.string().min(1).max(updateNoteBodyTitleMax).optional(),
+    event: zod.string().min(1).max(updateNoteBodyEventMax).optional(),
+    eventDate: zod.iso.date().nullish(),
+    content: zod
+      .string()
+      .optional()
+      .describe("At most 256 KiB in UTF-8; larger content returns 413."),
+    tags: zod
+      .array(zod.string().min(1).max(updateNoteBodyTagsItemMax))
+      .max(updateNoteBodyTagsMax)
+      .optional(),
+  })
+  .describe(
+    "At least one recognized field is required. Only submitted fields are validated, so legacy records can be repaired incrementally.",
+  );
 
 export const UpdateNoteResponse = zod.object({
   id: zod.int(),
@@ -198,11 +302,15 @@ export const DeleteNoteResponse = zod.void();
  * Create a new note from markdown. Parses frontmatter for title, event, date, and tags; filenames are not deduplicated.
  * @summary Upload markdown file
  */
+export const uploadNoteMarkdownBodyFilenameMax = 255;
+
 export const UploadNoteMarkdownBody = zod.object({
-  filename: zod.string(),
+  filename: zod.string().min(1).max(uploadNoteMarkdownBodyFilenameMax),
   content: zod
     .string()
-    .describe("Raw markdown content (may include YAML frontmatter)"),
+    .describe(
+      "Raw markdown, at most 256 KiB UTF-8 including frontmatter. Effective frontmatter fields follow the same validation as note creation.",
+    ),
 });
 
 export const UploadNoteMarkdownResponse = zod.object({
@@ -227,6 +335,16 @@ export const UploadNoteMarkdownResponse = zod.object({
  * Create a note using Authorization Bearer or X-API-Key header authentication. A legacy body apiKey is also accepted. Query-string authentication is not supported.
  * @summary Agent upload endpoint
  */
+export const agentUploadNoteBodyFilenameMax = 255;
+
+export const agentUploadNoteBodyTitleMax = 256;
+
+export const agentUploadNoteBodyEventMax = 256;
+
+export const agentUploadNoteBodyTagsItemMax = 64;
+
+export const agentUploadNoteBodyTagsMax = 32;
+
 export const AgentUploadNoteBody = zod.object({
   apiKey: zod
     .string()
@@ -234,12 +352,17 @@ export const AgentUploadNoteBody = zod.object({
     .describe(
       "Legacy authentication fallback. Prefer Authorization Bearer or X-API-Key headers; an explicit header takes precedence.",
     ),
-  filename: zod.string(),
-  content: zod.string().describe("Raw markdown content"),
-  title: zod.string().nullish(),
-  event: zod.string().nullish(),
-  eventDate: zod.string().nullish(),
-  tags: zod.array(zod.string()).optional(),
+  filename: zod.string().min(1).max(agentUploadNoteBodyFilenameMax),
+  content: zod
+    .string()
+    .describe("Raw markdown, at most 256 KiB UTF-8 including frontmatter"),
+  title: zod.string().min(1).max(agentUploadNoteBodyTitleMax).nullish(),
+  event: zod.string().min(1).max(agentUploadNoteBodyEventMax).nullish(),
+  eventDate: zod.iso.date().nullish(),
+  tags: zod
+    .array(zod.string().min(1).max(agentUploadNoteBodyTagsItemMax))
+    .max(agentUploadNoteBodyTagsMax)
+    .optional(),
 });
 
 export const AgentUploadNoteResponse = zod.object({

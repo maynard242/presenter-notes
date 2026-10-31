@@ -7,7 +7,11 @@
  */
 
 export interface UploadMarkdownBody {
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
   filename: string;
-  /** Raw markdown content (may include YAML frontmatter) */
+  /** Raw markdown, at most 256 KiB UTF-8 including frontmatter. Effective frontmatter fields follow the same validation as note creation. */
   content: string;
 }

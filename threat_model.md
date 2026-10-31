@@ -33,7 +33,7 @@ Production scope for this scan excludes `artifacts/mockup-sandbox`, which is a d
 
 ### Spoofing
 
-The app relies on Clerk sessions for browser users and `AGENT_API_KEY` for machine clients. Protected note endpoints MUST require a valid Clerk-authenticated identity, and agent-only endpoints MUST require a strong secret presented through non-leaky channels. Host/header-derived Clerk proxy behavior MUST only trust deployment-controlled forwarding headers.
+The app relies on Clerk sessions for browser users and `AGENT_API_KEY` for machine clients. Protected note endpoints MUST require a valid Clerk-authenticated identity, and agent-only endpoints MUST require a strong secret presented through non-leaky channels. Clerk host/proxy behavior accepts only exact configured `APP_ORIGINS`; forwarded headers select from that allowlist, never create trust. Malformed/multiple values are rejected before forwarding server credentials. The upstream Clerk destination remains fixed.
 
 ### Tampering
 
@@ -45,7 +45,9 @@ The primary confidentiality risk is cross-user note exposure. All list, search, 
 
 ### Denial of Service
 
-The API accepts JSON payloads up to 10 MB and supports full-text-like searches over note content. The service MUST avoid unauthenticated high-cost operations, and note ingestion/search paths SHOULD remain bounded so a single client cannot exhaust database or application resources.
+The API limits JSON to 1 MiB and Markdown to 256 KiB UTF-8, validates bounded metadata and actual calendar dates at the shared service boundary, and uses SQL-projected metadata pages. Owner budgets are durable PostgreSQL fixed windows (120 authenticated requests/minute, 20 persistence write attempts/minute); quota-sensitive creates/updates/deletes serialize under an owner advisory transaction lock (1000 notes, 100 MiB UTF-8 text). Budget charges commit separately from note writes. Quota checks permit non-growing legacy updates and never truncate existing data.
+
+Residual risks include unauthenticated envelope parsing/authentication costs, per-user-to-global amplification if signup is unrestricted, PostgreSQL substring-scan cost, fixed-window boundary bursts, and direct database writers bypassing app locks/policy. These require hosting/Clerk policy and operations controls; no adversarial production load test establishes protection. Existing oversized legacy notes remain readable rather than silently truncated. Vite dev/preview binds localhost by default with exact host restrictions and is never a production serving strategy.
 
 ### Elevation of Privilege
 

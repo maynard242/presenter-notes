@@ -32,31 +32,90 @@ export interface Note {
   updatedAt: string;
 }
 
-export type NoteList = Note[];
-
-export interface CreateNoteBody {
+export interface NoteSummary {
+  id: number;
   title: string;
   event: string;
   /** @nullable */
-  eventDate?: string | null;
-  content: string;
-  tags?: string[];
+  eventDate: string | null;
+  tags: string[];
   /** @nullable */
+  filename: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** @maxLength 240 */
+  preview: string;
+}
+
+export interface NotePage {
+  notes: NoteSummary[];
+  hasMore: boolean;
+}
+
+export type NoteList = Note[];
+
+export interface CreateNoteBody {
+  /**
+   * @minLength 1
+   * @maxLength 256
+   */
+  title: string;
+  /**
+   * @minLength 1
+   * @maxLength 256
+   */
+  event: string;
+  /** @nullable */
+  eventDate?: string | null;
+  /** At most 256 KiB in UTF-8; larger content returns 413. Title and event must not be blank. */
+  content: string;
+  /**
+   * @maxItems 32
+   * @items.minLength 1
+   * @items.maxLength 64
+   */
+  tags?: string[];
+  /**
+   * @minLength 1
+   * @maxLength 255
+   * @nullable
+   */
   filename?: string | null;
 }
 
+/**
+ * At least one recognized field is required. Only submitted fields are validated, so legacy records can be repaired incrementally.
+ */
 export interface UpdateNoteBody {
+  /**
+   * @minLength 1
+   * @maxLength 256
+   */
   title?: string;
+  /**
+   * @minLength 1
+   * @maxLength 256
+   */
   event?: string;
   /** @nullable */
   eventDate?: string | null;
+  /** At most 256 KiB in UTF-8; larger content returns 413. */
   content?: string;
+  /**
+   * @maxItems 32
+   * @items.minLength 1
+   * @items.maxLength 64
+   */
   tags?: string[];
 }
 
 export interface UploadMarkdownBody {
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
   filename: string;
-  /** Raw markdown content (may include YAML frontmatter) */
+  /** Raw markdown, at most 256 KiB UTF-8 including frontmatter. Effective frontmatter fields follow the same validation as note creation. */
   content: string;
 }
 
@@ -66,15 +125,32 @@ export interface AgentUploadBody {
    * @deprecated
    */
   apiKey?: string;
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
   filename: string;
-  /** Raw markdown content */
+  /** Raw markdown, at most 256 KiB UTF-8 including frontmatter */
   content: string;
-  /** @nullable */
+  /**
+   * @minLength 1
+   * @maxLength 256
+   * @nullable
+   */
   title?: string | null;
-  /** @nullable */
+  /**
+   * @minLength 1
+   * @maxLength 256
+   * @nullable
+   */
   event?: string | null;
   /** @nullable */
   eventDate?: string | null;
+  /**
+   * @maxItems 32
+   * @items.minLength 1
+   * @items.maxLength 64
+   */
   tags?: string[];
 }
 
@@ -103,4 +179,35 @@ export type ListNotesParams = {
    * Filter by event name (partial match)
    */
   event?: string;
+  /**
+   * @minimum 1
+   * @maximum 10
+   */
+  limit?: number;
+  /**
+   * @minimum 0
+   * @maximum 100000
+   */
+  offset?: number;
+};
+
+export type ListNoteSummariesParams = {
+  /**
+   * @maxLength 256
+   */
+  search?: string;
+  /**
+   * @maxLength 256
+   */
+  event?: string;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+  /**
+   * @minimum 0
+   * @maximum 100000
+   */
+  offset?: number;
 };

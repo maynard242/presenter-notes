@@ -8,6 +8,7 @@ import {
 import { getAuth } from "@clerk/express";
 import {
   ListNotesQueryParams,
+  ListNoteSummariesQueryParams,
   CreateNoteBody,
   GetNoteParams,
   UpdateNoteParams,
@@ -17,6 +18,7 @@ import {
   AgentUploadNoteBody,
 } from "@workspace/api-zod";
 import { checkAgentApiKey } from "../lib/agentAuth";
+import { consumeBudget } from "../lib/resourceGuards";
 import {
   createNoteForUser,
   createNoteFromMarkdown,
@@ -25,6 +27,7 @@ import {
   getStatsForUser,
   listEventsForUser,
   listNotesForUser,
+  listNoteSummariesForUser,
   updateNoteForUser,
 } from "../lib/notesService";
 
@@ -37,11 +40,11 @@ interface AuthedRequest extends Request {
   userId: string;
 }
 
-function requireAuth(
+async function requireAuth(
   req: Request,
   res: Response,
   next: NextFunction,
-): void {
+): Promise<void> {
   const auth = getAuth(req);
   const userId = auth?.userId;
   if (!userId) {
@@ -49,18 +52,29 @@ function requireAuth(
     return;
   }
   (req as AuthedRequest).userId = userId;
+  await consumeBudget(userId, "request");
   next();
 }
 
 router.get("/notes", requireAuth, async (req, res): Promise<void> => {
   const params = ListNotesQueryParams.safeParse(req.query);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+  if (!params.success || Object.values(req.query).some((value) => typeof value !== "string")) {
+    res.status(400).json({ error: "Invalid note pagination or filter" });
     return;
   }
   const { userId } = req as AuthedRequest;
   const notes = await listNotesForUser(userId, params.data);
   res.json(notes);
+});
+
+router.get("/notes/page", requireAuth, async (req, res): Promise<void> => {
+  const params = ListNoteSummariesQueryParams.safeParse(req.query);
+  if (!params.success || Object.values(req.query).some((value) => typeof value !== "string")) {
+    res.status(400).json({ error: "Invalid note pagination or filter" });
+    return;
+  }
+  const { userId } = req as AuthedRequest;
+  res.json(await listNoteSummariesForUser(userId, params.data));
 });
 
 router.get("/notes/events", requireAuth, async (req, res): Promise<void> => {
@@ -91,16 +105,11 @@ router.post("/notes/upload", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/notes/agent-upload", async (req, res): Promise<void> => {
-  const parsed = AgentUploadNoteBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
   // Prefer header auth (Authorization: Bearer / X-API-Key). Body apiKey is
   // accepted for backward compatibility with existing curl callers, but
   // header auth is preferred — body fields leak into request-body logs.
-  if (!checkAgentApiKey(req, AGENT_API_KEY, parsed.data.apiKey)) {
+  const legacyKey = req.body && typeof req.body.apiKey === "string" ? req.body.apiKey : undefined;
+  if (!checkAgentApiKey(req, AGENT_API_KEY, legacyKey)) {
     res
       .status(401)
       .set("WWW-Authenticate", 'Bearer realm="presenter-notes"')
@@ -113,6 +122,12 @@ router.post("/notes/agent-upload", async (req, res): Promise<void> => {
     return;
   }
 
+  await consumeBudget(AGENT_OWNER_USER_ID, "request");
+  const parsed = AgentUploadNoteBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid Markdown upload" });
+    return;
+  }
   const { filename, content, title, event, eventDate, tags } = parsed.data;
   const note = await createNoteFromMarkdown(
     AGENT_OWNER_USER_ID,

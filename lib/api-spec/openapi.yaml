@@ -32,7 +32,7 @@ paths:
       operationId: listNotes
       tags: [notes]
       summary: List notes
-      description: List all presentation notes, optionally filtered
+      description: Legacy full-content array, limited to 10 notes per page. Prefer /notes/page for metadata-only pagination.
       parameters:
         - name: search
           in: query
@@ -46,6 +46,20 @@ paths:
           schema:
             type: string
           description: Filter by event name (partial match)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 10
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+            default: 0
       responses:
         "200":
           description: List of notes
@@ -78,6 +92,50 @@ paths:
           description: Bad request
         "401":
           description: Unauthorized
+
+  /notes/page:
+    get:
+      operationId: listNoteSummaries
+      tags: [notes]
+      summary: List a bounded page of note metadata and previews
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 256
+        - name: event
+          in: query
+          schema:
+            type: string
+            maxLength: 256
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+            default: 0
+      responses:
+        "200":
+          description: Metadata only; use GET /notes/{id} for full content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotePage"
+        "400":
+          description: Invalid pagination or filter
+        "401":
+          description: Unauthorized
+        "429":
+          description: Per-user request budget exceeded; respect Retry-After
 
   /notes/events:
     get:
@@ -284,6 +342,43 @@ components:
         - createdAt
         - updatedAt
 
+    NoteSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        event:
+          type: string
+        eventDate:
+          type: ["string", "null"]
+        tags:
+          type: array
+          items:
+            type: string
+        filename:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        preview:
+          type: string
+          maxLength: 240
+      required: [id, title, event, eventDate, tags, filename, createdAt, updatedAt, preview]
+
+    NotePage:
+      type: object
+      properties:
+        notes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NoteSummary"
+        hasMore:
+          type: boolean
+      required: [notes, hasMore]
+
     NoteList:
       type: array
       items:
@@ -294,18 +389,29 @@ components:
       properties:
         title:
           type: string
+          minLength: 1
+          maxLength: 256
         event:
           type: string
+          minLength: 1
+          maxLength: 256
         eventDate:
           type: ["string", "null"]
+          format: date
         content:
           type: string
+          description: At most 256 KiB in UTF-8; larger content returns 413. Title and event must not be blank.
         tags:
           type: array
+          maxItems: 32
           items:
             type: string
+            minLength: 1
+            maxLength: 64
         filename:
           type: ["string", "null"]
+          minLength: 1
+          maxLength: 255
       required:
         - title
         - event
@@ -313,28 +419,40 @@ components:
 
     UpdateNoteBody:
       type: object
+      description: At least one recognized field is required. Only submitted fields are validated, so legacy records can be repaired incrementally.
       properties:
         title:
           type: string
+          minLength: 1
+          maxLength: 256
         event:
           type: string
+          minLength: 1
+          maxLength: 256
         eventDate:
           type: ["string", "null"]
+          format: date
         content:
           type: string
+          description: At most 256 KiB in UTF-8; larger content returns 413.
         tags:
           type: array
+          maxItems: 32
           items:
             type: string
+            minLength: 1
+            maxLength: 64
 
     UploadMarkdownBody:
       type: object
       properties:
         filename:
           type: string
+          minLength: 1
+          maxLength: 255
         content:
           type: string
-          description: Raw markdown content (may include YAML frontmatter)
+          description: Raw markdown, at most 256 KiB UTF-8 including frontmatter. Effective frontmatter fields follow the same validation as note creation.
       required:
         - filename
         - content
@@ -348,19 +466,29 @@ components:
           deprecated: true
         filename:
           type: string
+          minLength: 1
+          maxLength: 255
         content:
           type: string
-          description: Raw markdown content
+          description: Raw markdown, at most 256 KiB UTF-8 including frontmatter
         title:
           type: ["string", "null"]
+          minLength: 1
+          maxLength: 256
         event:
           type: ["string", "null"]
+          minLength: 1
+          maxLength: 256
         eventDate:
           type: ["string", "null"]
+          format: date
         tags:
           type: array
+          maxItems: 32
           items:
             type: string
+            minLength: 1
+            maxLength: 64
       required:
         - filename
         - content

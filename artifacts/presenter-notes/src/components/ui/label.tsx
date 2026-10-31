@@ -1,5 +1,4 @@
-"use client"
-
+// Vite renders this component client-side; an RSC directive is not needed.
 import * as React from "react"
 import * as LabelPrimitive from "@radix-ui/react-label"
 import { cva, type VariantProps } from "class-variance-authority"

@@ -2,15 +2,18 @@ import { Switch, Route, Redirect, Router as WouterRouter, useLocation } from "wo
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
+
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn, dark } from "@clerk/themes";
-import { useEffect, useRef } from "react";
-import LandingPage from "@/pages/landing-page";
-import NotesList from "@/pages/notes-list";
-import NoteDetail from "@/pages/note-detail";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useTheme } from "@/lib/theme";
+
+// In particular, keep the Markdown editor/renderer out of the landing/auth path.
+const LandingPage = lazy(() => import("@/pages/landing-page"));
+const NotesList = lazy(() => import("@/pages/notes-list"));
+const NoteDetail = lazy(() => import("@/pages/note-detail"));
+const NotFound = lazy(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
 
@@ -213,6 +216,7 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
+        <Suspense fallback={<div role="status" className="p-6 text-muted-foreground">Loading…</div>}>
         <Switch>
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />
@@ -221,6 +225,7 @@ function ClerkProviderWithRoutes() {
           <Route path="/notes/:id" component={ProtectedNoteDetail} />
           <Route component={NotFound} />
         </Switch>
+        </Suspense>
       </QueryClientProvider>
     </ClerkProvider>
   );

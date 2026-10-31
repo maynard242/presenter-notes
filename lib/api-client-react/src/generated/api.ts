@@ -26,9 +26,11 @@ import type {
   CreateNoteBody,
   EventList,
   HealthStatus,
+  ListNoteSummariesParams,
   ListNotesParams,
   Note,
   NoteList,
+  NotePage,
   NotesStats,
   UpdateNoteBody,
   UploadMarkdownBody,
@@ -214,7 +216,7 @@ export const getListNotesUrl = (params?: ListNotesParams) => {
 };
 
 /**
- * List all presentation notes, optionally filtered
+ * Legacy full-content array, limited to 10 notes per page. Prefer /notes/page for metadata-only pagination.
  * @summary List notes
  */
 export const listNotes = async (
@@ -466,6 +468,184 @@ export const useCreateNote = <TError = ErrorType<void>, TContext = unknown>(
 > => {
   return useMutation(getCreateNoteMutationOptions(options), queryClient);
 };
+
+export const getListNoteSummariesUrl = (params?: ListNoteSummariesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/notes/page?${stringifiedParams}`
+    : `/api/notes/page`;
+};
+
+/**
+ * @summary List a bounded page of note metadata and previews
+ */
+export const listNoteSummaries = async (
+  params?: ListNoteSummariesParams,
+  options?: Parameters<typeof customFetch>[1],
+): Promise<NotePage> => {
+  return customFetch<NotePage>(getListNoteSummariesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListNoteSummariesQueryKey = (
+  params?: ListNoteSummariesParams,
+) => {
+  return [`/api/notes/page`, ...(params ? [params] : [])] as const;
+};
+
+export const getListNoteSummariesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listNoteSummaries>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListNoteSummariesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listNoteSummaries>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListNoteSummariesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listNoteSummaries>>
+  > = ({ signal }) => listNoteSummaries(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listNoteSummaries>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListNoteSummariesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listNoteSummaries>>
+>;
+export type ListNoteSummariesQueryError = ErrorType<void>;
+
+export function useListNoteSummaries<
+  TData = Awaited<ReturnType<typeof listNoteSummaries>>,
+  TError = ErrorType<void>,
+>(
+  params: undefined | ListNoteSummariesParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listNoteSummaries>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listNoteSummaries>>,
+          TError,
+          Awaited<ReturnType<typeof listNoteSummaries>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListNoteSummaries<
+  TData = Awaited<ReturnType<typeof listNoteSummaries>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListNoteSummariesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listNoteSummaries>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listNoteSummaries>>,
+          TError,
+          Awaited<ReturnType<typeof listNoteSummaries>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListNoteSummaries<
+  TData = Awaited<ReturnType<typeof listNoteSummaries>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListNoteSummariesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listNoteSummaries>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List a bounded page of note metadata and previews
+ */
+
+export function useListNoteSummaries<
+  TData = Awaited<ReturnType<typeof listNoteSummaries>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListNoteSummariesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listNoteSummaries>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListNoteSummariesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
 
 export const getListEventsUrl = () => {
   return `/api/notes/events`;

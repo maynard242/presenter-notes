@@ -13,6 +13,7 @@ const service = vi.hoisted(() => ({
   searchNotesForUser: vi.fn(),
 }));
 vi.mock("../src/lib/notesService", () => service);
+vi.mock("../src/lib/resourceGuards", () => ({ consumeBudget: vi.fn() }));
 vi.mock("../src/lib/logger", () => ({ logger: { error: vi.fn() } }));
 
 it.each([

@@ -16,6 +16,10 @@ import {
   listNotesForUser,
   updateNoteForUser,
 } from "../src/lib/notesService";
+vi.mock("../src/lib/resourceGuards", () => ({
+  checkNoteQuota: vi.fn(),
+  withUserWrite: vi.fn(async (_user, fn) => fn((await import("@workspace/db")).db)),
+}));
 
 beforeEach(() => query.mockResolvedValue({ rows: [] }));
 
@@ -38,6 +42,7 @@ describe("notes query boundaries", () => {
       "%climate%",
       "%climate%",
       "%Summit%",
+      10,
     ]);
     expect(text).toContain(" and ");
   });
@@ -56,14 +61,14 @@ describe("notes query boundaries", () => {
     await listNotesForUser("user-owner", {
       search: input,
       event: input,
-      limit: 25,
+      limit: 10,
     });
     const { text, params } = lastQuery();
     expect(text).not.toContain(input);
     expect(params).toEqual([
       "user-owner",
       ...Array(4).fill("%50\\%\\_\\\\' OR 1=1 --%"),
-      25,
+      10,
     ]);
   });
 

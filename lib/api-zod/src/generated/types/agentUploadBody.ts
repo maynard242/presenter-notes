@@ -12,14 +12,31 @@ export interface AgentUploadBody {
    * @deprecated
    */
   apiKey?: string;
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
   filename: string;
-  /** Raw markdown content */
+  /** Raw markdown, at most 256 KiB UTF-8 including frontmatter */
   content: string;
-  /** @nullable */
+  /**
+   * @minLength 1
+   * @maxLength 256
+   * @nullable
+   */
   title?: string | null;
-  /** @nullable */
+  /**
+   * @minLength 1
+   * @maxLength 256
+   * @nullable
+   */
   event?: string | null;
   /** @nullable */
   eventDate?: string | null;
+  /**
+   * @maxItems 32
+   * @items.minLength 1
+   * @items.maxLength 64
+   */
   tags?: string[];
 }

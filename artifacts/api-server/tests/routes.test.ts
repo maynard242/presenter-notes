@@ -10,9 +10,13 @@ const service = vi.hoisted(() => ({
   getStatsForUser: vi.fn(),
   listEventsForUser: vi.fn(),
   listNotesForUser: vi.fn(),
+  listNoteSummariesForUser: vi.fn(),
   updateNoteForUser: vi.fn(),
 }));
 vi.mock("../src/lib/notesService", () => service);
+const budgets = vi.hoisted(() => ({ consumeBudget: vi.fn() }));
+vi.mock("../src/lib/resourceGuards", () => budgets);
+import { serviceErrorHandler, ServiceError } from "../src/lib/errors";
 vi.mock("@clerk/express", () => ({
   getAuth: (req: express.Request) => ({
     userId: req.headers["x-test-user"] ?? null,
@@ -28,8 +32,9 @@ beforeAll(async () => {
   vi.stubEnv("AGENT_OWNER_USER_ID", "user-agent-owner");
   const { default: router } = await import("../src/routes/notes");
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "1mb" }));
   app.use("/api", router);
+  app.use(serviceErrorHandler);
   server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -122,12 +127,42 @@ describe("REST agent authentication", () => {
 });
 
 describe("browser routes", () => {
-  it.each(["/notes", "/notes/1", "/notes/events", "/notes/stats"])(
+  it("serves metadata pagination under the session owner", async () => {
+    service.listNoteSummariesForUser.mockResolvedValue({ notes: [], hasMore: false });
+    const res = await fetch(`${base}/api/notes/page?search=AI&event=Summit&limit=25&offset=25`, { headers: { "x-test-user": "user-session" } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ notes: [], hasMore: false });
+    expect(service.listNoteSummariesForUser).toHaveBeenCalledWith("user-session", { search: "AI", event: "Summit", limit: 25, offset: 25 });
+    expect(budgets.consumeBudget).toHaveBeenCalledWith("user-session", "request");
+  });
+  it.each(["limit=0", "limit=101", "limit=1.2", "offset=-1", "offset=100001", "search=x&search=y", "limit=1&limit=2"])("rejects invalid pagination %s", async (query) => {
+    const res = await fetch(`${base}/api/notes/page?${query}`, { headers: { "x-test-user": "user-session" } });
+    expect(res.status).toBe(400);
+    expect(service.listNoteSummariesForUser).not.toHaveBeenCalled();
+  });
+  it("returns safe rate-limit errors before reading notes", async () => {
+    budgets.consumeBudget.mockRejectedValueOnce(new ServiceError(429, "Request budget exceeded", 60));
+    const res = await fetch(`${base}/api/notes/page`, { headers: { "x-test-user": "user-session" } });
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("60");
+    expect(service.listNoteSummariesForUser).not.toHaveBeenCalled();
+  });
+  it("returns bounded parser failures without reaching storage", async () => {
+    for (const [body, status] of [["{", 400], [JSON.stringify({ content: "x".repeat(1024 * 1024) }), 413]] as const) {
+      const res = await fetch(`${base}/api/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+      expect(res.status).toBe(status);
+      expect((await res.json()).error).not.toContain("SyntaxError");
+    }
+    expect(budgets.consumeBudget).not.toHaveBeenCalled();
+    expect(service.createNoteForUser).not.toHaveBeenCalled();
+  });
+  it.each(["/notes", "/notes/page", "/notes/1", "/notes/events", "/notes/stats"])(
     "rejects unauthenticated GET %s",
     async (path) => {
       expect((await fetch(`${base}/api${path}`)).status).toBe(401);
       expect(service.listNotesForUser).not.toHaveBeenCalled();
       expect(service.getNoteForUser).not.toHaveBeenCalled();
+      expect(budgets.consumeBudget).not.toHaveBeenCalled();
     },
   );
 

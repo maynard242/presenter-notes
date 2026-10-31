@@ -15,4 +15,14 @@ export type ListNotesParams = {
    * Filter by event name (partial match)
    */
   event?: string;
+  /**
+   * @minimum 1
+   * @maximum 10
+   */
+  limit?: number;
+  /**
+   * @minimum 0
+   * @maximum 100000
+   */
+  offset?: number;
 };

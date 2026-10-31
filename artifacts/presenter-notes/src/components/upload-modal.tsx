@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { UploadCloud, File, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
-import { useUploadNoteMarkdown, getListNotesQueryKey, getGetNotesStatsQueryKey, getListEventsQueryKey } from "@workspace/api-client-react";
+import { useUploadNoteMarkdown, getListNotesQueryKey, getListNoteSummariesQueryKey, getGetNotesStatsQueryKey, getListEventsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -10,6 +10,8 @@ interface UploadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+const MAX_MARKDOWN_BYTES = 256 * 1024;
 
 export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
   const [file, setFile] = useState<File | null>(null);
@@ -22,6 +24,7 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
       onSuccess: () => {
         setIsSuccess(true);
         queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListNoteSummariesQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetNotesStatsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
         setTimeout(() => {
@@ -30,7 +33,7 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
           setIsSuccess(false);
         }, 1500);
       },
-      onError: (err: any) => {
+      onError: (err) => {
         setError(err.message || "Failed to upload file. Ensure it's valid markdown.");
       }
     }
@@ -39,8 +42,14 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
     setIsSuccess(false);
+    setFile(null);
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
+      if (selectedFile.size > MAX_MARKDOWN_BYTES) {
+        setError("Markdown files must be 256 KiB or smaller (including frontmatter). Choose a smaller file.");
+        e.target.value = "";
+        return;
+      }
       if (!selectedFile.name.toLowerCase().endsWith('.md')) {
         setError("Only markdown (.md) files are supported.");
         return;
@@ -50,8 +59,12 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || uploadMutation.isPending) return;
     setError(null);
+    if (file.size > MAX_MARKDOWN_BYTES) {
+      setError("Markdown files must be 256 KiB or smaller (including frontmatter). Choose a smaller file.");
+      return;
+    }
     
     try {
       const content = await file.text();
@@ -81,7 +94,7 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
           <DialogHeader className="mb-6">
             <DialogTitle className="text-2xl font-serif">Upload Note</DialogTitle>
             <DialogDescription className="text-base">
-              Select a markdown file. Frontmatter will be parsed automatically.
+              Select a markdown file up to 256 KiB, including frontmatter. Frontmatter will be parsed automatically.
             </DialogDescription>
           </DialogHeader>
 
@@ -91,12 +104,13 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
                 <input 
                   type="file" 
                   accept=".md"
+                  aria-label="Choose Markdown file"
                   onChange={handleFileChange}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
                 <UploadCloud className="h-10 w-10 text-primary mx-auto mb-4 opacity-80" />
                 <p className="font-medium text-foreground">Click or drag file here</p>
-                <p className="text-sm text-muted-foreground mt-1">Supports .md files</p>
+                <p className="text-sm text-muted-foreground mt-1">Supports .md files up to 256 KiB</p>
               </div>
             ) : (
               <div className="border border-border rounded-xl p-4 flex items-center gap-4 bg-background">
@@ -105,7 +119,7 @@ export default function UploadModal({ open, onOpenChange }: UploadModalProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{file.name}</p>
-                  <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
+                  <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KiB</p>
                 </div>
                 {!uploadMutation.isPending && !isSuccess && (
                   <Button variant="ghost" size="sm" onClick={() => setFile(null)} className="shrink-0 text-muted-foreground">

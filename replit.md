@@ -38,9 +38,23 @@ pnpm workspace monorepo using TypeScript. Personal presenter notes app with Cler
 
 Uses Replit-managed Clerk. Keys are auto-provisioned (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`). The production Clerk proxy is `/api/__clerk`. All note routes require a Clerk session except `/api/notes/agent-upload`, which uses the agent key. Every database operation is owner-scoped.
 
+Production also requires `APP_ORIGINS`: exact comma-separated HTTPS deployment/custom origins. Forwarded headers never establish trust. Missing/invalid origin config fails closed. Development accepts loopback HTTP or the exact validated `REPLIT_DEV_DOMAIN`. Both Vite servers default to localhost; opt into LAN binding via `DEV_SERVER_HOST` and exact `DEV_ALLOWED_HOSTS`, never a wildcard.
+
 ## Database Schema
 
 - `notes` table: id, user_id (required), title, event, event_date (text), content (Markdown), tags (text[]), filename, created_at, updated_at
+- `resource_guards`: independent durable request/write counters in fixed one-minute windows, one row per owner
+
+Before deploying this release against an existing owner-scoped database, explicitly apply and verify the additive guard/index migration (not `push --force`):
+
+```sh
+pnpm --filter @workspace/db exec node scripts/harden.mjs --apply
+pnpm --filter @workspace/db exec node scripts/harden.mjs --verify
+```
+
+Limits: 256 KiB UTF-8 Markdown (including upload frontmatter), 1 MiB JSON, real calendar dates, 256-character title/event, 32 tags of 64 characters, 255-character filename. PostgreSQL enforces application budgets of 120 requests/minute and 20 persistence write attempts/minute per owner. All service writes serialize quota checks: 1000 notes and 100 MiB UTF-8 note text per owner. Existing data is never rewritten/truncated; over-quota owners may read/delete and make non-growing edits. See README.md for error semantics, migration timeouts, and limitations.
+
+The UI uses `/api/notes/page`: metadata/previews, default 25/max 100 notes with limit/offset and `{notes, hasMore}`. The legacy `/api/notes` full-content array is now limited to default/max 10. Callers must paginate instead of assuming an entire corpus. Opt-in PostgreSQL integration tests require a disposable loopback `TEST_DATABASE_URL` ending in `_test`; default tests need no database.
 
 ## Agent Integration (REST + MCP)
 
@@ -71,7 +85,7 @@ Markdown frontmatter is parsed for title, event, date, and tags. Explicit body f
 
 Tools exposed:
 - `upload_note` — upload markdown content with frontmatter
-- `list_notes` — list with optional event filter
+- `list_notes` — metadata/previews with optional event filter, limit (25 default/100 max), and offset
 - `search_notes` — substring search across title/event/content
 - `get_note` — fetch full note by id
 

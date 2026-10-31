@@ -12,6 +12,7 @@ Built for speakers who want a quiet, focused space to keep their talks organized
 - **File upload** through the UI (drag-and-drop or file picker)
 - **REST endpoint** for any HTTP-capable agent (Replit Agent, Anthropic API tool use, scripts, etc.)
 - **MCP server** at `/api/mcp` for Claude Desktop, Cursor, and other MCP clients — tools: `upload_note`, `list_notes`, `search_notes`, `get_note`
+- **Bounded browsing** with metadata-only pages, content previews, and Previous/Next controls
 - **Mobile-friendly** responsive layout
 - **Light and dark mode**, toggled from the header (sun/moon icon) or following the OS preference by default; choice is remembered per-browser
 - Warm amber styling, serif headlines, soft background imagery — calm and focused
@@ -58,6 +59,8 @@ pnpm --filter @workspace/presenter-notes run dev
 
 The frontend defaults to port 5173. Requests use same-origin `/api` paths: outside Replit, use a reverse proxy routing `/api/*` to the API on port 3001 and other paths to Vite. The bare Vite server does not proxy API requests. Export environment variables into the appropriate shells; the API does not automatically load `.env` files. The development-only sandbox defaults to port 5174 and `BASE_PATH=/`.
 
+Both Vite servers bind to `localhost` by default, overriding the legacy CLI `--host 0.0.0.0`. For deliberate LAN access, set `DEV_SERVER_HOST=0.0.0.0` and provide exact comma-separated `DEV_ALLOWED_HOSTS`; do not expose a dev server as production. A validated `REPLIT_DEV_DOMAIN` is allowed explicitly. Production API origins must be configured separately below.
+
 ### Verification
 
 ```bash
@@ -68,7 +71,14 @@ pnpm run security:check
 pnpm run vercel-build
 ```
 
-Vitest tests use synthetic identities, ephemeral local HTTP servers, and mocked database transport; no live notes are read or written. They cover REST/MCP authentication and owner-scoped SQL. `security:check` audits all workspace dependencies and fails for any known vulnerability. See [the security review](docs/security-review.md) for coverage and limitations.
+Default Vitest tests use synthetic identities, ephemeral local HTTP/Vite servers, and mocked database transport. PostgreSQL integration suites are opt-in and skip without `TEST_DATABASE_URL`. They refuse non-loopback hosts or database names not ending in `_test`, create unique temporary schemas, and remove only those schemas afterward. Never supply a production database.
+
+```bash
+# Point at an isolated local PostgreSQL test database, not application data:
+TEST_DATABASE_URL='postgresql://postgres@127.0.0.1:5432/presenter_notes_test' pnpm test
+```
+
+The PostgreSQL suites exercise actual atomic rate windows, separately pooled connections, quota races, rollback, migration idempotency, and service/REST/MCP CRUD. Clerk identity is synthetic in these tests: they do not prove real Clerk login/session integration. `security:check` audits all workspace dependencies and fails for any known vulnerability. See [the security review](docs/security-review.md) for coverage and limitations.
 
 ## Environment Variables
 
@@ -84,6 +94,10 @@ Vitest tests use synthetic identities, ephemeral local HTTP servers, and mocked 
 | `PORT` | standalone API only | Listener port; not required by the Vercel handler |
 | `VITE_CLERK_PROXY_URL` | no | Optional frontend Clerk proxy URL |
 | `BASE_PATH` | no | Frontend/sandbox base path; defaults to `/` |
+| `APP_ORIGINS` | production API: yes | Exact comma-separated HTTPS public origins, e.g. `https://presenter-notes-api-server.vercel.app`. Forwarded headers can select only an explicitly allowed origin; malformed/multiple values are rejected. Missing/invalid configuration fails closed with 503. Nonproduction also permits loopback HTTP and the exact validated Replit development domain. |
+| `DEV_SERVER_HOST` | no | Explicit Vite listen host; default `localhost`. LAN listening must be deliberate. |
+| `DEV_ALLOWED_HOSTS` | no | Exact comma-separated additional Vite hostnames; URLs, wildcards, and domain suffix rules are rejected. |
+| `TEST_DATABASE_URL` | integration tests only | Disposable loopback PostgreSQL database whose name ends in `_test`; test schemas are created and dropped. |
 
 `SESSION_SECRET` is not used. On Replit, Clerk keys are auto-provisioned; set **both** `AGENT_API_KEY` and `AGENT_OWNER_USER_ID` for agent access.
 
@@ -91,7 +105,7 @@ Vitest tests use synthetic identities, ephemeral local HTTP servers, and mocked 
 
 ## Database
 
-Schema is defined in `lib/db/src/schema/notes.ts` using Drizzle. To push schema changes during development:
+Schema is defined in `lib/db/src/schema/` using Drizzle. To push schema changes during development:
 
 ```bash
 pnpm --filter @workspace/db run push
@@ -99,6 +113,29 @@ pnpm --filter @workspace/db run push
 
 Tables:
 - `notes` — id (serial), user_id (required owner), title, event, event_date (text or null), content (Markdown), tags (text[]), filename (nullable), created_at, updated_at
+- `resource_guards` — one row per authenticated owner, with separate request/write minute windows and counters
+
+### Additive hardening migration (existing owner-scoped databases)
+
+Before running this release against an existing database, review `lib/db/migrations/0001_resource_hardening.sql` and apply it explicitly. It creates the guard table and two owner indexes; it does not rewrite notes, backfill ownership, or delete data. Provision a new database's `notes` schema separately first. Load `DATABASE_URL` securely into the command environment; the runner does not load credential files or print connection details.
+
+```bash
+pnpm --filter @workspace/db exec node scripts/harden.mjs --apply
+pnpm --filter @workspace/db exec node scripts/harden.mjs --verify
+```
+
+The runner uses a transaction, migration advisory lock, 5-second lock timeout and 30-second statement timeout. It validates the exact guard columns/defaults/primary key and index definitions, rolls back on mismatch, and reads back committed catalog state. Reapplication is idempotent. Ordinary index creation can briefly block writes; schedule accordingly, and investigate a timeout rather than using a forced schema push. Deploy/build/post-merge never applies it automatically. To roll back application code, leave these additive objects in place; do not drop data or schema as an application rollback shortcut.
+
+### Input, rate and storage policy
+
+- Content/Markdown: **256 KiB UTF-8**, including raw upload frontmatter; JSON envelope: **1 MiB**. Oversized content/envelopes return `413`.
+- Title/event: nonblank, at most **256** characters; filename: at most **255**; tags: at most **32**, each nonblank and at most **64** characters. Invalid input returns `400`.
+- Dates: real calendar dates in `YYYY-MM-DD`, years `0001`–`9999`, or `null` to clear. Invalid new dates are rejected. Existing malformed dates are not rewritten; the UI displays a safe fallback. Partial updates validate only submitted fields, allowing gradual legacy repairs.
+- Authenticated owner budgets: **120 requests/minute**, plus **20 persistence write attempts/minute**, shared across browser and agent access to that owner. PostgreSQL atomic fixed windows survive serverless restarts; `429` responses include `Retry-After: 60`. A fixed-window boundary can allow adjacent bursts; this is not a smooth sliding-window limit.
+- MCP accepts one JSON-RPC message per HTTP request; arrays/batches return `400` / `-32600` before tool dispatch, preventing batch reads from bypassing the HTTP request budget.
+- Write budget charges commit before note transactions, including quota failures/rollbacks. Invalid input is still charged to the authenticated request budget but may be rejected before the persistence write budget. Unauthenticated traffic creates no budget rows.
+- Per owner: **1000 notes**, **100 MiB** total UTF-8 text across title/event/content/date/filename/tags (not physical PostgreSQL storage). Quota failures return `409`. All app creates/updates/deletes take the same owner advisory transaction lock. Existing over-quota owners retain reads/deletes and non-growing updates. No automatic truncation or deletion occurs.
+- The controls require the guard migration and fail closed if the database is unavailable. Lock/statement timeouts in resource transactions return safe `503` errors. They do not replace hosting-level protection for unauthenticated traffic, Clerk signup policy, backups, or a global user-count/storage cap.
 
 ## API
 
@@ -114,14 +151,15 @@ The command automatically repairs Orval's split-Zod barrel using `scripts/finali
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/notes` | Clerk | List notes; `?search=`, `?event=` query params |
+| GET | `/api/notes/page` | Clerk | Metadata/previews; `search`, `event`, `limit` (default 25, max 100), `offset` (default 0, max 100000); `{notes, hasMore}` |
+| GET | `/api/notes` | Clerk | Legacy full-content array; `search`, `event`, `limit` (default/max 10), `offset` (max 100000) |
 | GET | `/api/notes/:id` | Clerk | Get a single note |
 | POST | `/api/notes` | Clerk | Create note from JSON body |
 | PATCH | `/api/notes/:id` | Clerk | Update note |
 | DELETE | `/api/notes/:id` | Clerk | Delete note |
 | POST | `/api/notes/upload` | Clerk | Upload a markdown file (parses frontmatter) |
-| GET | `/api/notes/events` | Clerk | List distinct events |
-| GET | `/api/notes/stats` | Clerk | Counts and recent notes for the dashboard |
+| GET | `/api/notes/events` | Clerk | List up to 1000 distinct events |
+| GET | `/api/notes/stats` | Clerk | Aggregate counts and five recent full notes (legacy shape) |
 | POST | `/api/notes/agent-upload` | `AGENT_API_KEY` | Programmatic upload from any agent |
 
 ### Agent REST upload
@@ -140,7 +178,7 @@ curl -X POST https://<your-domain>/api/notes/agent-upload \
   }'
 ```
 
-The parser supports a small YAML-like subset: single-line `title`, `event`, `date` (or `eventDate`), and inline/list-style `tags`, not arbitrary YAML. Non-null JSON overrides take precedence. Uploads always create a new note; filenames are not deduplicated. A body `apiKey` is optional when using header authentication, and an explicit header takes precedence over a legacy body key.
+The parser supports a small YAML-like subset: single-line `title`, `event`, `date` (or `eventDate`), and inline/list-style `tags`, not arbitrary YAML. Non-null title/event overrides take precedence; an explicit `eventDate: null` clears even a frontmatter date. Effective fields are validated after parsing. Uploads always create a new note; filenames are not deduplicated. A body `apiKey` is optional when using header authentication, and an explicit header takes precedence over a legacy body key.
 
 ## MCP Server (for Claude Desktop, Cursor, etc.)
 
@@ -155,8 +193,8 @@ The MCP server is exposed at `POST /api/mcp` using the Streamable HTTP transport
 | Tool | Purpose |
 |------|---------|
 | `upload_note` | Upload markdown content, with optional title/event/date/tags overrides |
-| `list_notes` | List notes (optional event filter, optional limit) |
-| `search_notes` | Substring search across title, event, content |
+| `list_notes` | Metadata/previews with optional event filter, limit (default 25, max 100) and offset (max 100000); retains JSON array tool output |
+| `search_notes` | Substring search across title, event, content; metadata/previews, limit default 25/max 100 |
 | `get_note` | Fetch full content of one note by numeric id |
 
 ### Wiring into Claude Desktop
@@ -197,7 +235,8 @@ Most MCP-aware clients accept the same Streamable HTTP URL directly. Point them 
 - All user-facing routes require a valid Clerk session.
 - All Drizzle queries use parameter binding.
 - All note operations are scoped to the authenticated user, or `AGENT_OWNER_USER_ID` for agents. Missing key/owner configuration fails closed.
-- Search uses escaped `ILIKE` substring patterns, not PostgreSQL full-text search. REST listing is currently unpaginated.
+- Search uses escaped `ILIKE` substring patterns, not PostgreSQL full-text search. Metadata pages project only 240-character previews in PostgreSQL; full note content is retrieved by ID. Pagination uses a deterministic date/creation/id order, but concurrent changes can shift offset pages; it is not a snapshot cursor.
+- Shared service validation, durable PostgreSQL budgets, serialized quotas, safe error responses, and explicit trusted origins apply across supported ingress paths. Direct database writers are outside these application controls.
 - Security-review scope, known limitations, and follow-ups are recorded in [docs/security-review.md](docs/security-review.md). Passing checks is not a guarantee that no vulnerabilities exist.
 
 ## Deployment
@@ -217,9 +256,10 @@ The build uses Vercel's [Build Output API](https://vercel.com/docs/build-output-
    - `VITE_CLERK_PUBLISHABLE_KEY` (same value)
    - `AGENT_API_KEY` (any strong random string)
    - `AGENT_OWNER_USER_ID` (Clerk user id that owns agent-uploaded notes)
+   - `APP_ORIGINS` (exact HTTPS production origin, plus any deliberately supported custom domains)
    - `CORS_ORIGIN` (only if the frontend is hosted on a different origin from the API)
-4. Deploy. `vercel-build` chains: API bundle → Vite build → `finalize-vercel.mjs` (writes `.vercel/output/`).
-5. Provision the database through a separately reviewed schema/migration procedure. Deployment does not run migrations or modify existing notes.
+4. Provision a fresh database or apply/verify the reviewed additive migration above for an existing owner-scoped database **before** deploying this release. Deployment does not run migrations or modify existing notes.
+5. Deploy. `vercel-build` chains: API bundle → Vite build → `finalize-vercel.mjs` (writes `.vercel/output/`). Preview deployment domains must be explicitly included in that environment's `APP_ORIGINS` if API access is intended; arbitrary Vercel domains are not implicitly trusted.
 6. Update your Claude Desktop / Cursor / agent config with the deployed URL: `https://<your-app>.vercel.app/api/mcp`.
 
 **Notes:**
@@ -232,8 +272,8 @@ The build uses Vercel's [Build Output API](https://vercel.com/docs/build-output-
 
 This app also runs on [Replit Deployments](https://docs.replit.com/category/deployments). After deploying:
 
-1. Set `AGENT_API_KEY` (strong random string) and `AGENT_OWNER_USER_ID` in the Secrets tab.
-2. Restart the API Server workflow.
+1. Set `AGENT_API_KEY` (strong random string), `AGENT_OWNER_USER_ID`, and production `APP_ORIGINS` in the Secrets tab. Replit deployment/custom domains need explicit HTTPS entries; the validated dev domain is trusted only outside production.
+2. Apply/verify the reviewed migration separately, then restart the API Server workflow.
 3. Update your Claude Desktop / Cursor / agent config with the deployed URL.
 
 ## License

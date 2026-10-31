@@ -6,11 +6,28 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * At least one recognized field is required. Only submitted fields are validated, so legacy records can be repaired incrementally.
+ */
 export interface UpdateNoteBody {
+  /**
+   * @minLength 1
+   * @maxLength 256
+   */
   title?: string;
+  /**
+   * @minLength 1
+   * @maxLength 256
+   */
   event?: string;
   /** @nullable */
   eventDate?: string | null;
+  /** At most 256 KiB in UTF-8; larger content returns 413. */
   content?: string;
+  /**
+   * @maxItems 32
+   * @items.minLength 1
+   * @items.maxLength 64
+   */
   tags?: string[];
 }
