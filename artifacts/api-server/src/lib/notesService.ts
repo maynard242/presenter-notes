@@ -22,30 +22,24 @@ export async function listNotesForUser(
   userId: string,
   filters: ListFilters = {},
 ): Promise<Note[]> {
-  const ownerFilter = eq(notesTable.userId, userId);
+  const conditions = [eq(notesTable.userId, userId)];
   let q = db.select().from(notesTable).$dynamic();
 
   if (filters.search) {
     const pattern = `%${escapeLike(filters.search)}%`;
-    q = q.where(
-      and(
-        ownerFilter,
-        or(
-          ilike(notesTable.title, pattern),
-          ilike(notesTable.event, pattern),
-          ilike(notesTable.content, pattern),
-        ),
-      ),
+    conditions.push(
+      or(
+        ilike(notesTable.title, pattern),
+        ilike(notesTable.event, pattern),
+        ilike(notesTable.content, pattern),
+      )!,
     );
-  } else if (filters.event) {
-    q = q.where(
-      and(ownerFilter, ilike(notesTable.event, `%${escapeLike(filters.event)}%`)),
-    );
-  } else {
-    q = q.where(ownerFilter);
+  }
+  if (filters.event) {
+    conditions.push(ilike(notesTable.event, `%${escapeLike(filters.event)}%`));
   }
 
-  q = q.orderBy(...ORDER_BY_RECENT);
+  q = q.where(and(...conditions)).orderBy(...ORDER_BY_RECENT);
   if (filters.limit) q = q.limit(filters.limit);
   return q;
 }

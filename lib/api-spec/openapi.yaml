@@ -39,7 +39,7 @@ paths:
           required: false
           schema:
             type: string
-          description: Full-text search across title, event, and content
+          description: Case-insensitive substring search across title, event, and content; combines with the event filter
         - name: event
           in: query
           required: false
@@ -190,7 +190,7 @@ paths:
       operationId: uploadNoteMarkdown
       tags: [notes]
       summary: Upload markdown file
-      description: Upload a markdown file to create or update a note. Parses frontmatter for title, event, and date.
+      description: Create a new note from markdown. Parses frontmatter for title, event, date, and tags; filenames are not deduplicated.
       requestBody:
         required: true
         content:
@@ -199,7 +199,7 @@ paths:
               $ref: "#/components/schemas/UploadMarkdownBody"
       responses:
         "201":
-          description: Created or updated note
+          description: Created note
           content:
             application/json:
               schema:
@@ -214,7 +214,7 @@ paths:
       operationId: agentUploadNote
       tags: [notes]
       summary: Agent upload endpoint
-      description: Authenticated endpoint for agents to push markdown notes using an API key
+      description: Create a note using Authorization Bearer or X-API-Key header authentication. A legacy body apiKey is also accepted. Query-string authentication is not supported.
       requestBody:
         required: true
         content:
@@ -223,7 +223,7 @@ paths:
               $ref: "#/components/schemas/AgentUploadBody"
       responses:
         "201":
-          description: Created or updated note
+          description: Created note
           content:
             application/json:
               schema:
@@ -344,7 +344,8 @@ components:
       properties:
         apiKey:
           type: string
-          description: Secret agent API key for authentication
+          description: Legacy authentication fallback. Prefer Authorization Bearer or X-API-Key headers; an explicit header takes precedence.
+          deprecated: true
         filename:
           type: string
         content:
@@ -361,7 +362,6 @@ components:
           items:
             type: string
       required:
-        - apiKey
         - filename
         - content
 

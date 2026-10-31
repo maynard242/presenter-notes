@@ -14,7 +14,7 @@ pnpm workspace monorepo using TypeScript. Personal presenter notes app with Cler
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Build**: esbuild (ESM bundle)
 - **Auth**: Replit-managed Clerk (`@clerk/express` server, `@clerk/react` frontend)
 - **Frontend**: React + Vite (artifact: `presenter-notes`, preview path `/`)
 - **Markdown rendering**: `react-markdown` + `remark-gfm`
@@ -23,6 +23,8 @@ pnpm workspace monorepo using TypeScript. Personal presenter notes app with Cler
 
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
+- `pnpm test` — REST/MCP and database-query regressions with synthetic data
+- `pnpm run security:check` — audit all workspace dependencies
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
@@ -34,15 +36,15 @@ pnpm workspace monorepo using TypeScript. Personal presenter notes app with Cler
 
 ## Authentication
 
-Uses Replit-managed Clerk. Keys are auto-provisioned (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`). Clerk proxy is mounted at `/__clerk` in the API server. All `/api/notes/*` routes require Clerk session auth except `/api/notes/agent-upload` which uses `AGENT_API_KEY`.
+Uses Replit-managed Clerk. Keys are auto-provisioned (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`). The production Clerk proxy is `/api/__clerk`. All note routes require a Clerk session except `/api/notes/agent-upload`, which uses the agent key. Every database operation is owner-scoped.
 
 ## Database Schema
 
-- `notes` table: id, title, event, event_date, content (markdown), tags (text[]), filename, created_at, updated_at
+- `notes` table: id, user_id (required), title, event, event_date (text), content (Markdown), tags (text[]), filename, created_at, updated_at
 
 ## Agent Integration (REST + MCP)
 
-The `AGENT_API_KEY` secret protects both the REST and MCP endpoints. Set it once in the Secrets tab.
+The `AGENT_API_KEY` secret protects both REST and MCP. Set it and `AGENT_OWNER_USER_ID` in the Secrets tab. Missing configuration fails closed. Prefer header authentication; the REST body-key example below is legacy compatibility only. See README.md for the current header-only example.
 
 ### REST endpoint (any HTTP-capable agent)
 
@@ -65,7 +67,7 @@ Markdown frontmatter is parsed for title, event, date, and tags. Explicit body f
 
 ### MCP endpoint (Claude Desktop, Cursor, other MCP clients)
 
-`POST /api/mcp` (Streamable HTTP transport, stateless). Auth via `Authorization: Bearer <AGENT_API_KEY>` header (also accepts `X-API-Key` header or `?apiKey=` query param).
+`POST /api/mcp` (Streamable HTTP transport, stateless). Auth via `Authorization: Bearer <AGENT_API_KEY>` header (also accepts the `X-API-Key` header). Query-string and body-key authentication are not supported for MCP.
 
 Tools exposed:
 - `upload_note` — upload markdown content with frontmatter
@@ -100,9 +102,6 @@ Restart Claude Desktop. The four tools appear in the tools menu.
 
 ## Note on api-zod index.ts
 
-After running codegen, `lib/api-zod/src/index.ts` gets regenerated with two conflicting exports. Always re-write it to:
-```ts
-export * from "./generated/api";
-```
+The codegen command automatically repairs the split-Zod barrel using `scripts/finalize-codegen.mjs`. Do not edit generated files manually.
 
-See `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+README.md is the canonical runbook. See docs/security-review.md for the release security scope. Database migration is never an automatic post-merge/deployment step.

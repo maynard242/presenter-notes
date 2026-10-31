@@ -7,6 +7,8 @@
   },
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "test": "vitest run",
+    "security:check": "pnpm audit --audit-level=low",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "vercel-build": "pnpm --filter @workspace/api-server run build:vercel && pnpm --filter @workspace/presenter-notes run build && node ./scripts/finalize-vercel.mjs",
     "typecheck:libs": "tsc --build",
@@ -14,10 +16,11 @@
   },
   "private": true,
   "devDependencies": {
-    "prettier": "^3.9.6",
-    "typescript": "~5.9.3"
+    "prettier": "^3.9.10",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.12"
   },
   "dependencies": {
-    "@replit/connectors-sdk": "^0.4.2"
+    "@replit/connectors-sdk": "^0.4.3"
   }
 }
