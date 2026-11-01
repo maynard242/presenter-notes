@@ -4,6 +4,8 @@ A personal, login-protected website for storing and organizing presentation talk
 
 Built for speakers who want a quiet, focused space to keep their talks organized — like a well-worn notebook before stepping on stage.
 
+Production: https://presenter-notes-api-server.vercel.app. See the [hardening release record](docs/releases/2026-10-31-hardening.md) for the deployed application commit, migration verification, smoke checks, acceptance, and cleanup status.
+
 ## Features
 
 - **Login-protected** with [Clerk](https://clerk.com) — your notes stay yours

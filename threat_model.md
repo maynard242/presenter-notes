@@ -47,6 +47,8 @@ The primary confidentiality risk is cross-user note exposure. All list, search, 
 
 The API limits JSON to 1 MiB and Markdown to 256 KiB UTF-8, validates bounded metadata and actual calendar dates at the shared service boundary, and uses SQL-projected metadata pages. Owner budgets are durable PostgreSQL fixed windows (120 authenticated requests/minute, 20 persistence write attempts/minute); quota-sensitive creates/updates/deletes serialize under an owner advisory transaction lock (1000 notes, 100 MiB UTF-8 text). Budget charges commit separately from note writes. Quota checks permit non-growing legacy updates and never truncate existing data.
 
+MCP rejects JSON-RPC arrays before SDK dispatch, after authentication and request-budget charging. This prevents concurrent batched reads from amplifying one HTTP budget charge into many operations. See the [security review](docs/security-review.md) and [release evidence](docs/releases/2026-10-31-hardening.md) for the reproduced bypass, regression coverage, and verification limits.
+
 Residual risks include unauthenticated envelope parsing/authentication costs, per-user-to-global amplification if signup is unrestricted, PostgreSQL substring-scan cost, fixed-window boundary bursts, and direct database writers bypassing app locks/policy. These require hosting/Clerk policy and operations controls; no adversarial production load test establishes protection. Existing oversized legacy notes remain readable rather than silently truncated. Vite dev/preview binds localhost by default with exact host restrictions and is never a production serving strategy.
 
 ### Elevation of Privilege

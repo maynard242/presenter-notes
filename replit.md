@@ -119,3 +119,5 @@ Restart Claude Desktop. The four tools appear in the tools menu.
 The codegen command automatically repairs the split-Zod barrel using `scripts/finalize-codegen.mjs`. Do not edit generated files manually.
 
 README.md is the canonical runbook. See docs/security-review.md for the release security scope. Database migration is never an automatic post-merge/deployment step.
+
+The [completed hardening release record](docs/releases/2026-10-31-hardening.md) contains the verified application commit/deployment, production migration and smoke evidence, user-reported acceptance, and cleanup status. MCP batches are intentionally rejected before tool dispatch; send one JSON-RPC message per HTTP request.

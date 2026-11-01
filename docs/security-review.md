@@ -10,6 +10,8 @@ Scope: source, generated contracts, dependencies, local synthetic integration te
 
 ### Resolved earlier advisory findings
 
+Deployment, migration readback, public smoke checks, user-reported acceptance, and temporary-file cleanup are recorded in the [completed release handoff](releases/2026-10-31-hardening.md). User feedback does not expand the automated authenticated-production test coverage described below.
+
 - **Malformed calendar dates:** shared service validation rejects invalid new dates on create/update/Markdown upload, including effective frontmatter. Generated schemas preserve date-only strings instead of coercing them through JavaScript Date rollover. Frontend calendar parsing safely rejects malformed legacy values and preserves local calendar days. Existing notes are not rewritten.
 - **Per-note and request bounds:** 256 KiB UTF-8 Markdown, 1 MiB JSON, bounded title/event/filename/tags, valid IDs/filters/pagination, safe 400/413 errors. Unexpected HTTP/MCP failures expose neither SQL nor exception text; logging omits raw exception data.
 - **Distributed resource controls:** one PostgreSQL guard row per authenticated owner, with independent 120-request/20-write fixed minute windows, atomic UPSERT, database clock, and 429/Retry-After. Persistence budget charges commit separately from note writes and survive rejected/rolled-back operations. All app create/update/delete paths use the same owner transaction advisory lock before quota reads. Limits are 1000 notes and 100 MiB UTF-8 text; non-growing legacy edits and deletion remain available without truncation.
@@ -51,13 +53,13 @@ Typecheck, workspace build, Vercel packaging, and dependency audit passed. The f
 
 Date: 2026-10-31. Scope: the Presenter Notes application and dependency tree, not a penetration test or vulnerability-free certification.
 
-## Result
+### Result
 
 **Source review and final maintenance diff review: PASS, no demonstrated security release blockers.** Independent read-only reviews found no confirmed authentication bypass, cross-user note access, SQL injection, stored XSS, credential disclosure, or blocking maintenance regression. The final reviewer independently ran all 33 tests, TypeScript checks, dependency audit, peer checks, and script/diff checks. The maintainer separately exercised code generation and both build paths under Node 24.
 
 The registry audit initially reported 1 critical, 21 high, 27 moderate, and 4 low findings. After dependency updates, `pnpm run security:check` reports **no known vulnerabilities**, including development dependencies. React was updated within the 19.1 series to satisfy Clerk's peer requirements. Zod was moved to the patched 4.x line, and the OpenAPI client/validators were regenerated using the updated Orval version. Registry advisories and audit results are time-sensitive.
 
-## Verified controls
+### Verified controls
 
 - Browser routes require Clerk-derived user identity; caller-supplied ownership is not accepted.
 - List/search, events, stats, get, update, and delete queries contain owner predicates and bind parameters through Drizzle.
@@ -69,7 +71,7 @@ The registry audit initially reported 1 critical, 21 high, 27 moderate, and 4 lo
 - Source review checked Markdown rendering for raw HTML/JavaScript URL exposure. There is no raw-HTML rendering plugin configured.
 - Environment files and Vercel local state are ignored by Git. Post-merge/build/deployment does not automatically modify database schema.
 
-## Executable evidence
+### Executable evidence
 
 Run on Node 24:
 
@@ -86,7 +88,7 @@ All **33 tests across four suites passed**. Regression tests live in `artifacts/
 
 A successful build still emits existing frontend sourcemap diagnostics and a large-chunk warning. Those are not security passes or failures.
 
-## Open advisory findings
+### Historical advisory findings (resolved in the hardening release)
 
 These were not demonstrated release blockers and were deliberately not expanded into a new subsystem in this maintenance pass:
 
@@ -95,6 +97,6 @@ These were not demonstrated release blockers and were deliberately not expanded 
 3. **Low, ingress-dependent — forwarded host/protocol trust.** Clerk configuration uses forwarded headers. The proxy destination is fixed; a signing-key/authentication bypass was not demonstrated. Deployment ingress must overwrite forwarding headers. Follow-up: a canonical-origin/hostname allowlist if direct or untrusted ingress is supported.
 4. **Development exposure.** Vite uses Replit-oriented permissive host settings and can listen on all interfaces. Use trusted networks; do not expose a development server as production.
 
-## Limits
+### Historical verification limits
 
 No production note was created, edited, or deleted for verification. No production migration, account enumeration, brute force, load test, or secret rotation was performed. Authenticated browser CRUD, live database ownership isolation, Clerk configuration, backup coverage, and edge enforcement require separate integration/operations checks. Post-deployment smoke checks should verify the landing/sign-in routes, process health, static assets, and unauthenticated rejection of protected APIs without reading private notes.
