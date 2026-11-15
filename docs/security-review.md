@@ -12,7 +12,7 @@ Scope: dependency advisories that landed after 2026-10-31, deployment security h
 
 ### Verification limits
 
-Verified locally: full test suite, typecheck, `vercel-build` output (config.json routes and CSP), and `pnpm audit`. Post-deploy smoke: security headers present on the SPA and API responses, unauthenticated 401s unchanged, health route 200. Not verified: an authenticated browser sign-in flow under the new CSP — Clerk direct-mode FAPI origins are derived from the baked publishable key precisely so they cannot drift, but a real login should be exercised by the maintainer.
+Verified locally: full test suite, typecheck, `vercel-build` output (config.json routes and CSP), and `pnpm audit`. Post-deploy smoke: security headers present on the SPA and API responses, unauthenticated 401s unchanged, health route 200. The maintainer exercised a real browser sign-in under the new CSP on the production deployment after release and reported it working (2026-11-15).
 
 ### Open items (operations, not code)
 
