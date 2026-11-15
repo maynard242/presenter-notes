@@ -5,6 +5,7 @@
   "engines": {
     "node": ">=24 <25"
   },
+  "packageManager": "pnpm@12.18.0",
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "test": "vitest run",

@@ -1,5 +1,27 @@
 # Security review
 
+## Response-header and dependency refresh — 2026-11-15
+
+Scope: dependency advisories that landed after 2026-10-31, deployment security headers, and build supply-chain settings. Not a penetration test.
+
+### Changes
+
+- **Dependency advisories (7: 1 low, 6 moderate):** `hono` 4.13.14 → 4.13.18 and `@hono/node-server` 2.1.5 → 2.1.8 (transitive via `@modelcontextprotocol/sdk`), covering the path-separator access-control bypass, CSRF check bypass, RegExpRouter wildcard skips and related advisories. `pnpm audit` reports no known vulnerabilities after the bump.
+- **Security headers:** `scripts/finalize-vercel.mjs` now emits Build Output `continue` routes attaching `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy` and `Cross-Origin-Opener-Policy` to every response, plus a CSP: `default-src 'none'` for `/api/*`, and a document CSP for the SPA with `script-src 'self'` + a build-time sha256 of the inline theme bootstrap and the Clerk FAPI origins derived from the publishable key embedded in the built bundle (fails the build if no key is found, so a key-less CSP can never ship). Local `pnpm run vercel-build` requires `VITE_CLERK_PUBLISHABLE_KEY` in the environment for the same reason.
+- **Build determinism:** `vercel.json` install switched to `pnpm install --frozen-lockfile`, and pnpm pinned via `packageManager` in the root `package.json` so Vercel installs exactly the committed lockfile.
+
+### Verification limits
+
+Verified locally: full test suite, typecheck, `vercel-build` output (config.json routes and CSP), and `pnpm audit`. Post-deploy smoke: security headers present on the SPA and API responses, unauthenticated 401s unchanged, health route 200. Not verified: an authenticated browser sign-in flow under the new CSP — Clerk direct-mode FAPI origins are derived from the baked publishable key precisely so they cannot drift, but a real login should be exercised by the maintainer.
+
+### Open items (operations, not code)
+
+- Production runs on a **Clerk development instance** (`pk_test_`, `driving-bullfrog-70.clerk.accounts.dev`): switch to production keys, then optionally enable the same-origin Clerk proxy by setting `VITE_CLERK_PROXY_URL` (the proxy middleware requires a production instance; dev instances bypass it).
+- `AGENT_API_KEY` is 197+ days old — rotate.
+- Confirm Vercel deployment protection (preview URLs share production secrets).
+
+---
+
 ## Remaining-issues hardening — 2026-10-31
 
 Scope: source, generated contracts, dependencies, local synthetic integration tests, and additive migration safety. This is not a penetration test or a vulnerability-free certification. The previous maintenance release's evidence is retained below as historical context.
