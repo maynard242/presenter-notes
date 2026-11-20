@@ -36,7 +36,7 @@ pnpm workspace monorepo using TypeScript. Personal presenter notes app with Cler
 
 ## Authentication
 
-Uses Replit-managed Clerk. Keys are auto-provisioned (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`). The production Clerk proxy is `/api/__clerk`. All note routes require a Clerk session except `/api/notes/agent-upload`, which uses the agent key. Every database operation is owner-scoped.
+Uses Replit-managed Clerk. Keys are auto-provisioned (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`). The production Clerk proxy is `/__clerk` (Clerk's registered path, also mounted at `/api/__clerk` for compatibility). All note routes require a Clerk session except `/api/notes/agent-upload`, which uses the agent key. Every database operation is owner-scoped.
 
 Production also requires `APP_ORIGINS`: exact comma-separated HTTPS deployment/custom origins. Forwarded headers never establish trust. Missing/invalid origin config fails closed. Development accepts loopback HTTP or the exact validated `REPLIT_DEV_DOMAIN`. Both Vite servers default to localhost; opt into LAN binding via `DEV_SERVER_HOST` and exact `DEV_ALLOWED_HOSTS`, never a wildcard.
 

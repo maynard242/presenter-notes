@@ -5,6 +5,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
   CLERK_PROXY_PATH,
+  CLERK_REGISTERED_PROXY_PATH,
   clerkProxyMiddleware,
   getClerkProxyHost,
   getTrustedAppOrigin,
@@ -47,6 +48,9 @@ app.use((req, _res, next) => {
   next();
 });
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
+// Clerk's production FAPI only accepts its registered proxy path; OAuth
+// redirects and proxy verification target /__clerk on the primary domain.
+app.use(CLERK_REGISTERED_PROXY_PATH, clerkProxyMiddleware(CLERK_REGISTERED_PROXY_PATH));
 
 // CORS: lock down by default. Set CORS_ORIGIN to a comma-separated allowlist
 // (e.g. "https://app.example.com") in production. Falls back to same-origin

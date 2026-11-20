@@ -13,6 +13,7 @@ vi.mock("http-proxy-middleware", () => ({
 }));
 import {
   CLERK_PROXY_PATH,
+  CLERK_REGISTERED_PROXY_PATH,
   clerkProxyMiddleware,
   getClerkProxyHost,
   getTrustedAppOrigin,
@@ -130,10 +131,22 @@ describe("Clerk proxy", () => {
     expect(proxy.handler).toHaveBeenCalledOnce();
     const upstream = { setHeader: vi.fn() };
     proxy.options.on.proxyReq(upstream, req);
-    expect(upstream.setHeader).toHaveBeenCalledWith("Clerk-Proxy-Url", `${canonical}${CLERK_PROXY_PATH}`);
+    expect(upstream.setHeader).toHaveBeenCalledWith("Clerk-Proxy-Url", `${canonical}${CLERK_REGISTERED_PROXY_PATH}`);
     expect(upstream.setHeader).toHaveBeenCalledWith("Clerk-Secret-Key", "sk_test_origin-regression-only");
     expect(proxy.options.pathRewrite(`${CLERK_PROXY_PATH}/v1/client`)).toBe("/v1/client");
     expect(proxy.options.pathRewrite("/v1/client")).toBe("/v1/client");
+  });
+  it("serves the registered /__clerk path and advertises it to the FAPI", () => {
+    const middleware = clerkProxyMiddleware(CLERK_REGISTERED_PROXY_PATH);
+    const req = request({ host: new URL(canonical).host });
+    middleware(req as any, {} as any, vi.fn());
+    expect(proxy.handler).toHaveBeenCalledOnce();
+    const upstream = { setHeader: vi.fn() };
+    proxy.options.on.proxyReq(upstream, req);
+    expect(upstream.setHeader).toHaveBeenCalledWith("Clerk-Proxy-Url", `${canonical}${CLERK_REGISTERED_PROXY_PATH}`);
+    expect(proxy.options.pathRewrite(`${CLERK_REGISTERED_PROXY_PATH}/v1/client`)).toBe("/v1/client");
+    // Paths not under the mount are forwarded untouched.
+    expect(proxy.options.pathRewrite(`${CLERK_PROXY_PATH}/v1/client`)).toBe(`${CLERK_PROXY_PATH}/v1/client`);
   });
   it("fails safely when no secret is configured", () => {
     vi.stubEnv("CLERK_SECRET_KEY", "");

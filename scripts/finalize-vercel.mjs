@@ -112,13 +112,13 @@ async function finalize() {
 
   // Routing rules:
   //   1. Header routes (continue: true) attach security headers and fall
-  //      through. API paths get the JSON policy; everything else gets the
-  //      SPA document policy.
+  //      through. API paths (including the Clerk proxy at /__clerk) get the
+  //      JSON policy; everything else gets the SPA document policy.
   //   2. `handle: filesystem` — serve any matching static file (CSS, JS,
   //      images, index.html) before falling through to functions.
-  //   3. `^/api(?:/.*)?$` → `/api` — every /api request is invoked against
-  //      the api function. The original req.url is preserved for Express
-  //      routing.
+  //   3. `^/api(?:/.*)?$` and `^/__clerk(?:/.*)?$` → `/api` — API requests and
+  //      the Clerk proxy path are invoked against the api function. The
+  //      original req.url is preserved for Express routing.
   //   4. `.*` → `/index.html` — SPA fallback: any unmatched path serves the
   //      Vite-built index.html so client-side routing (Wouter) works on
   //      hard refresh.
@@ -126,19 +126,20 @@ async function finalize() {
     version: 3,
     routes: [
       {
-        src: "^/api(?:/.*)?$",
+        src: "^/(?:api|__clerk)(?:/.*)?$",
         headers: apiSecurityHeaders,
         continue: true,
       },
       {
-        // Everything except /api (negative lookahead — a plain ^/.*$ here
-        // would also match /api and override the stricter API policy above).
-        src: "^(?!/api(?:/|$)).*$",
+        // Everything except /api and /__clerk (negative lookahead — a plain
+        // ^/.*$ here would also match them and override the stricter policy).
+        src: "^(?!/(?:api|__clerk)(?:/|$)).*$",
         headers: spaSecurityHeaders,
         continue: true,
       },
       { handle: "filesystem" },
       { src: "^/api(?:/.*)?$", dest: "/api" },
+      { src: "^/__clerk(?:/.*)?$", dest: "/api" },
       { src: "^/.*$", dest: "/index.html" },
     ],
   };

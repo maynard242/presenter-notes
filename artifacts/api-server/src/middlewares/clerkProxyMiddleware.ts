@@ -15,6 +15,13 @@ import { ServiceError } from "../lib/errors";
 
 const CLERK_FAPI = "https://frontend-api.clerk.dev";
 export const CLERK_PROXY_PATH = "/api/__clerk";
+// Path Clerk registers for the instance's primary domain (dashboard → Domains
+// → "Proxy Clerk through /__clerk"). Production instances validate the
+// Clerk-Proxy-Url header against exactly this path: requests advertising any
+// other proxy path are rejected with FAPI `host_invalid`. Development
+// instances do not enforce it, which is why the mismatch only surfaced with
+// production keys. Serve this path (and keep CLERK_PROXY_PATH as an alias).
+export const CLERK_REGISTERED_PROXY_PATH = "/__clerk";
 
 type OriginRequest = {
   headers: IncomingHttpHeaders;
@@ -104,7 +111,15 @@ export function getClerkProxyHost(req: OriginRequest): string {
   return new URL(getTrustedAppOrigin(req)).hostname;
 }
 
-export function clerkProxyMiddleware(): RequestHandler {
+/**
+ * @param mountPath URL prefix this handler is mounted under; stripped from the
+ *   upstream path. The Clerk-Proxy-Url header always advertises
+ *   CLERK_REGISTERED_PROXY_PATH regardless of the mount point, because the
+ *   production FAPI only accepts the instance's registered proxy URL.
+ */
+export function clerkProxyMiddleware(
+  mountPath: string = CLERK_PROXY_PATH,
+): RequestHandler {
   if (process.env.NODE_ENV !== "production") {
     return (_req, _res, next) => next();
   }
@@ -115,12 +130,12 @@ export function clerkProxyMiddleware(): RequestHandler {
   const proxy = createProxyMiddleware({
     target: CLERK_FAPI,
     changeOrigin: true,
-    pathRewrite: (path: string) => path.replace(new RegExp(`^${CLERK_PROXY_PATH}(?=/|$)`), ""),
+    pathRewrite: (path: string) => path.replace(new RegExp(`^${mountPath}(?=/|$)`), ""),
     on: {
       proxyReq: (proxyReq, req) => {
         const origin = getTrustedAppOrigin(req);
         const url = new URL(origin);
-        proxyReq.setHeader("Clerk-Proxy-Url", `${origin}${CLERK_PROXY_PATH}`);
+        proxyReq.setHeader("Clerk-Proxy-Url", `${origin}${CLERK_REGISTERED_PROXY_PATH}`);
         proxyReq.setHeader("Clerk-Secret-Key", secretKey);
         proxyReq.setHeader("X-Forwarded-Host", url.host);
         proxyReq.setHeader("X-Forwarded-Proto", url.protocol.slice(0, -1));

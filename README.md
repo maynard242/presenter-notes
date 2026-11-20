@@ -267,7 +267,7 @@ The build uses Vercel's [Build Output API](https://vercel.com/docs/build-output-
 **Notes:**
 
 - The MCP endpoint runs in stateless Streamable HTTP mode. The function metadata selects Node 24. Configure timeout limits in Vercel function metadata/settings; the source `maxDuration` export alone is not a Build Output API configuration guarantee.
-- The Clerk Frontend API proxy (`/api/__clerk/*`) runs inside the same function. Custom domains work without DNS CNAME setup.
+- The Clerk Frontend API proxy runs inside the same function at `/__clerk` (Clerk's registered path; production instances reject any other advertised proxy path with `host_invalid`) and at `/api/__clerk` (compatibility alias). Custom domains work without DNS CNAME setup.
 - `.vercel/output/` is generated at build time and gitignored.
 
 ### Replit
