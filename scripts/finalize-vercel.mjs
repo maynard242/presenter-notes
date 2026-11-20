@@ -86,14 +86,18 @@ async function buildSpaSecurityHeaders() {
   }
   const clerkOrigins = [`https://${clerkDomain}`, `https://clerk.${clerkDomain}`];
 
+  // Clerk's production bot protection runs Cloudflare Turnstile: its script
+  // and widget iframe come from challenges.cloudflare.com (sign-up/sign-in).
+  const turnstile = "https://challenges.cloudflare.com";
+
   const csp = [
     "default-src 'self'",
-    `script-src 'self'${scriptHashes.length ? ` ${scriptHashes.join(" ")}` : ""} ${clerkOrigins.join(" ")}`,
+    `script-src 'self'${scriptHashes.length ? ` ${scriptHashes.join(" ")}` : ""} ${clerkOrigins.join(" ")} ${turnstile}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src * data: blob:",
-    `connect-src 'self' ${clerkOrigins.join(" ")}`,
-    `frame-src 'self' ${clerkOrigins.join(" ")}`,
+    `connect-src 'self' ${clerkOrigins.join(" ")} ${turnstile}`,
+    `frame-src 'self' ${clerkOrigins.join(" ")} ${turnstile}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
